@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#00703c">
+<title>Proper Roads</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="sign">
+  <div class="sign-inner">
+    <h1>Proper Roads</h1>
+    <p>Shortest sensible route. No silly lanes.</p>
+  </div>
+  <button class="icon-btn" id="settingsBtn" type="button" aria-label="Settings">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.6 4.9-.1-1.4 2-1.6-2-3.4-2.4.9a8 8 0 0 0-1.2-.7L16.5 4h-4l-.4 2.6c-.4.2-.8.4-1.2.7l-2.4-1-2 3.5 2 1.6a8 8 0 0 0 0 1.4l-2 1.6 2 3.4 2.4-.9c.4.3.8.5 1.2.7l.4 2.5h4l.4-2.5c.4-.2.8-.4 1.2-.7l2.4.9 2-3.4-2-1.6Z"/></svg>
+  </button>
+</header>
+
+<main>
+  <section class="panel" aria-label="Plan a journey">
+    <form id="planForm" autocomplete="off">
+      <div class="field">
+        <label for="from">From</label>
+        <div class="with-btn">
+          <input id="from" placeholder="Postcode, place or address" required>
+          <button type="button" class="ghost" id="hereBtn" title="Use my location">Here</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="to">To</label>
+        <input id="to" placeholder="Postcode, place or address" required>
+      </div>
+      <div class="field">
+        <label for="tolerance">Lane tolerance</label>
+        <input type="range" id="tolerance" min="0" max="2" step="1" value="1" aria-describedby="tolHint">
+        <div class="ticks" aria-hidden="true"><span>Relaxed</span><span>Balanced</span><span>Strict</span></div>
+        <p class="hint" id="tolHint"></p>
+      </div>
+      <div class="actions">
+        <button class="primary" type="submit" id="goBtn">Find proper route</button>
+        <button class="ghost" type="button" id="saveBtn" hidden>Save journey</button>
+      </div>
+      <p class="status" id="status" role="status"></p>
+    </form>
+
+    <div id="results" hidden>
+      <div class="compare">
+        <div class="route-card std">
+          <h2>Usual route</h2>
+          <p class="big" id="stdTime"></p>
+          <p class="sub" id="stdDist"></p>
+          <p class="lanes" id="stdLanes"></p>
+        </div>
+        <div class="route-card pr">
+          <h2>Proper roads</h2>
+          <p class="big" id="prTime"></p>
+          <p class="sub" id="prDist"></p>
+          <p class="lanes" id="prLanes"></p>
+        </div>
+      </div>
+      <p class="verdict" id="verdict"></p>
+      <a class="primary go" id="gmaps" href="#" target="_blank" rel="noopener">Open in Google Maps</a>
+      <p class="hint" id="wpHint"></p>
+    </div>
+
+    <div id="savedBox">
+      <h2 class="small">Saved journeys</h2>
+      <ul id="saved"></ul>
+    </div>
+  </section>
+
+  <section class="map-wrap" aria-label="Map">
+    <div id="map"></div>
+    <div class="legend"><span class="k std"></span>Usual <span class="k pr"></span>Proper roads <span class="k wp"></span>Waypoint</div>
+  </section>
+</main>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h2>Settings</h2>
+    <label for="apiKey">GraphHopper API key</label>
+    <input id="apiKey" placeholder="Paste your key" spellcheck="false">
+    <p class="hint">Free key from graphhopper.com (sign up, then API Keys). It's stored only in this browser.</p>
+    <label for="maxWp">Waypoints sent to Google Maps</label>
+    <select id="maxWp"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>
+    <p class="hint">Google Maps on a phone handles about 3 well. Each one shows as a stop you drive through.</p>
+    <div class="actions"><button class="primary" value="save">Save</button><button class="ghost" value="cancel" formnovalidate>Cancel</button></div>
+  </form>
+</dialog>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="routing.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

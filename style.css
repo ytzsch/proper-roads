@@ -1,0 +1,68 @@
+/* Look: a UK primary-route sign. Green field, white text, yellow route numbers. */
+:root{
+  --green:#00703c;--green-deep:#00552d;--yellow:#ffd500;--ink:#16201b;--muted:#5b6b62;
+  --bg:#f4f6f3;--surface:#fff;--line:#d6ddd8;--std:#7b8591;--pr:#0a5cff;--danger:#b42318;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{--ink:#e6ece8;--muted:#9fb0a6;--bg:#0f1512;--surface:#18201b;--line:#2b3630;--std:#9aa4ae;--pr:#6c9dff;color-scheme:dark}}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Overpass,system-ui,sans-serif;display:flex;flex-direction:column}
+.sign{background:var(--green);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));
+  border-bottom:4px solid #fff;box-shadow:0 2px 0 var(--green-deep)}
+.sign h1{margin:0;font-weight:800;font-size:clamp(24px,5vw,32px);line-height:1.05}
+.sign p{margin:2px 0 0;font-size:14px;opacity:.9}
+.icon-btn{background:transparent;border:2px solid #fff;color:#fff;border-radius:8px;width:44px;height:44px;display:grid;place-items:center;cursor:pointer}
+main{flex:1;display:grid;grid-template-columns:minmax(300px,400px) 1fr;min-height:0}
+@media (max-width:760px){
+  html,body{height:auto}
+  main{display:flex;flex-direction:column}
+  .panel{overflow:visible;border-right:0}
+  .map-wrap{height:60vh;flex:none}
+}
+.panel{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;border-right:1px solid var(--line)}
+.field{display:grid;gap:6px;margin-bottom:12px}
+label{font-weight:600;font-size:14px}
+input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;min-height:44px}
+input:focus,select:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--yellow);outline-offset:1px}
+input[type=range]{padding:0;border:0;background:none;accent-color:var(--green)}
+.ticks{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.with-btn{display:flex;gap:8px}
+.with-btn input{flex:1}
+button,.go{font:inherit;font-weight:700;border-radius:8px;min-height:44px;padding:10px 16px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.primary{background:var(--green);color:#fff;border:2px solid var(--green)}
+.primary:disabled{opacity:.6;cursor:wait}
+.ghost{background:transparent;color:var(--green);border:2px solid var(--green)}
+@media (prefers-color-scheme:dark){.ghost{color:#7fd3a6;border-color:#7fd3a6}}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.status{min-height:1.5em;margin:8px 0 0;font-size:14px}
+.status.err{color:var(--danger);font-weight:600}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.route-card{background:var(--surface);border:2px solid var(--line);border-radius:10px;padding:12px}
+.route-card.pr{border-color:var(--pr)}
+.route-card h2{margin:0;font-size:14px;color:var(--muted)}
+.route-card.pr h2{color:var(--pr)}
+.big{font-size:28px;font-weight:800;margin:2px 0 0;line-height:1.1;white-space:nowrap}
+.sub{margin:0;font-size:14px;color:var(--muted);white-space:nowrap}
+.lanes{margin:6px 0 0;font-size:13px}
+.lanes b{background:var(--yellow);color:#000;padding:0 5px;border-radius:3px}
+.verdict{font-weight:600;margin:12px 0}
+.go{width:100%;font-size:18px}
+h2.small{font-size:14px;margin:0 0 8px;color:var(--muted)}
+#saved{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+#saved li{display:flex;gap:8px}
+#saved button.trip{flex:1;justify-content:flex-start;text-align:left;background:var(--surface);border:2px solid var(--line);color:var(--ink);font-weight:600}
+#saved button.del{background:none;border:0;color:var(--muted);min-width:44px}
+.map-wrap{position:relative;min-height:300px}
+#map{position:absolute;inset:0}
+.legend{position:absolute;left:10px;bottom:10px;z-index:500;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px;display:flex;align-items:center;gap:6px}
+.k{display:inline-block;width:18px;height:4px;border-radius:2px;margin-left:6px}
+.k.std{background:var(--std)}.k.pr{background:var(--pr)}.k.wp{width:10px;height:10px;border-radius:50%;background:var(--yellow);border:2px solid #000}
+dialog{border:0;border-radius:12px;padding:20px;width:min(420px,92vw);background:var(--surface);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin:0 0 12px}
+dialog label{display:block;margin-top:10px}
+dialog .actions{margin-top:16px}
+.wp-icon{background:var(--yellow);border:2px solid #000;border-radius:50%;color:#000;font:800 12px/16px Overpass,sans-serif;text-align:center}

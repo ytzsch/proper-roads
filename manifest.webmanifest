@@ -1,0 +1,10 @@
+{
+  "name": "Proper Roads",
+  "short_name": "Proper Roads",
+  "description": "Shortest sensible route without the narrow lanes, handed to Google Maps.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#00703c",
+  "theme_color": "#00703c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
