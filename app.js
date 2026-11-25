@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "19", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "20", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -544,9 +544,9 @@
     $("avoids").innerHTML = ""; avoidLayer.clearLayers();
     if (!list.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "None yet."; $("avoids").append(li); }
     list.forEach((a, i) => {
-      L.circle([a.lat, a.lng], { radius: 40, color: "#b42318", weight: 2, fillOpacity: .15, dashArray: "4 4" }).addTo(avoidLayer);
+      L.circle([a.lat, a.lng], { radius: 40, color: "#b42318", weight: a.all ? 3 : 2, fillOpacity: a.all ? .3 : .15, dashArray: a.all ? null : "4 4" }).addTo(avoidLayer);
       const li = document.createElement("li"); li.className = "row";
-      const t = document.createElement("span"); t.textContent = a.name || ("Near " + a.lat.toFixed(4) + ", " + a.lng.toFixed(4));
+      const t = document.createElement("span"); t.textContent = (a.name || ("Near " + a.lat.toFixed(4) + ", " + a.lng.toFixed(4))) + (a.all ? " · whole road" : "");
       const show = document.createElement("button"); show.type = "button"; show.className = "ghost small"; show.textContent = "Show";
       show.onclick = () => map.setView([a.lat, a.lng], 16);
       const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "✕";
@@ -567,19 +567,23 @@
     if (map.getZoom() < 13) { status("Zoom in on the lane, then tap it to avoid it."); return; }
     const el = document.createElement("div"); el.className = "ch-pop";
     const b = document.createElement("button"); b.type = "button"; b.className = "primary"; b.textContent = "Avoid this lane";
-    const n = document.createElement("div"); n.className = "ch-meta"; n.textContent = "Minor roads within about 40 m of this spot will be avoided.";
-    el.append(b, n);
+    const n = document.createElement("div"); n.className = "ch-meta"; n.textContent = "Minor roads within about 40 m of this spot. A and B roads stay usable.";
+    const b2 = document.createElement("button"); b2.type = "button"; b2.className = "ghost"; b2.textContent = "Avoid this road, even an A or B road";
+    const n2 = document.createElement("div"); n2.className = "ch-meta"; n2.textContent = "For B roads that are really lanes. Tap mid-road, away from junctions.";
+    el.append(b, n, b2, n2);
     const pop = L.popup().setLatLng(e.latlng).setContent(el).openOn(map);
-    b.onclick = async () => {
+    const add = async all => {
       const { lat, lng } = e.latlng;
       const list = store.get("avoids", []);
-      list.push({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), at: Date.now() });
+      list.push({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), at: Date.now(), all });
       store.set("avoids", list); renderAvoids(); map.closePopup(pop); markLayer.clearLayers();
       status("Lane avoided." + (current ? " Re-planning…" : ""));
       if (current) plan($("from").value, $("to").value);
       const name = await nameRoad(lat, lng);
       if (name) { const l = store.get("avoids", []); const it = l.find(x => x.lat === +lat.toFixed(6) && x.lng === +lng.toFixed(6)); if (it) { it.name = name; store.set("avoids", l); renderAvoids(); } }
     };
+    b.onclick = () => add(false);
+    b2.onclick = () => add(true);
   });
   renderAvoids();
 

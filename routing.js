@@ -60,8 +60,11 @@
       m.areas = { type: "FeatureCollection", features: avoids.map((a, i) => ({
         type: "Feature", id: "avoid" + i, properties: {}, geometry: { type: "Polygon", coordinates: octagon(a.lat, a.lng, 40) }
       })) };
-      const inAny = "(" + avoids.map((_, i) => "in_avoid" + i).join(" || ") + ")";
-      m.priority.push({ if: inAny + " && road_class != MOTORWAY && road_class != TRUNK && road_class != PRIMARY && road_class != SECONDARY", multiply_by: 0.01 });
+      const minor = avoids.map((a, i) => a.all ? null : "in_avoid" + i).filter(Boolean);
+      const whole = avoids.map((a, i) => a.all ? "in_avoid" + i : null).filter(Boolean);
+      if (minor.length) m.priority.push({ if: "(" + minor.join(" || ") + ") && road_class != MOTORWAY && road_class != TRUNK && road_class != PRIMARY && road_class != SECONDARY", multiply_by: 0.01 });
+      // "Whole road" avoids also cover B roads (and A roads) that are lanes in all but name.
+      if (whole.length) m.priority.push({ if: "(" + whole.join(" || ") + ") && road_class != MOTORWAY", multiply_by: 0.01 });
     }
     return m;
   }
