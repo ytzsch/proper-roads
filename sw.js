@@ -1,5 +1,5 @@
 // Caches the app shell so it opens instantly. Routes always come live from the network.
-const CACHE = "proper-roads-v15";
+const CACHE = "proper-roads-v16";
 const SHELL = ["./", "index.html", "style.css", "routing.js", "app.js", "pr-icon.svg", "pr-icon-192.png", "pr-icon-512.png", "app.webmanifest"];
 
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));

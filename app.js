@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "15", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "16", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -129,7 +129,11 @@
   function setSeg(id, v) { $(id).value = String(v); syncSeg(id); }
   document.querySelectorAll(".seg").forEach(seg => seg.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    const id = seg.dataset.for; setSeg(id, b.dataset.v); store.set(id, +b.dataset.v);
+    const id = seg.dataset.for;
+    if ($(id).value === b.dataset.v) return;
+    setSeg(id, b.dataset.v); store.set(id, +b.dataset.v);
+    // A route is on screen: re-plan straight away with the new setting.
+    if (current && !$("goBtn").disabled) plan($("from").value, $("to").value);
   }));
   setSeg("tolerance", store.get("tolerance", 1));
   setSeg("priority", store.get("priority", 0));
