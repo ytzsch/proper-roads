@@ -79,7 +79,11 @@
       locale: "en",
       details: ["road_class", "road_class_link"]
     };
-    if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority, avoids); }
+    if (level === "shortcut") {
+      // What a shortcut-happy router would do: shortest-ish, lanes welcome. Used only to see where to pin.
+      body["ch.disable"] = true;
+      body.custom_model = { speed: [], priority: [], distance_influence: 250 };
+    } else if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority, avoids); }
     return body;
   }
 

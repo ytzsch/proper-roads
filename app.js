@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "20", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "21", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -97,7 +97,7 @@
   // Returns all paths the server gives back. alt=true asks for up to 3 alternatives.
   async function route(from, to, level, key, priority, alt, via) {
     const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
-    const body = PR.routeBody(from, to, level, priority, via, level != null ? store.get("avoids", []) : null);
+    const body = PR.routeBody(from, to, level, priority, via, typeof level === "number" ? store.get("avoids", []) : null);
     if (alt && !via) Object.assign(body, PR.ALTERNATIVES); // alternatives only work for A→B
     let r;
     try {
@@ -149,9 +149,14 @@
       setPicked("from", fromText.trim(), from); setPicked("to", toText.trim(), to);
       if (via) setPicked("via", viaText, via);
       $("journey").textContent = from.label + "  →  " + (via ? via.label + "  →  " : "") + to.label;
-      const [stdPaths, options] = await Promise.all([route(from, to, null, key, 0, false, via), route(from, to, level, key, priority, true, via)]);
+      const [stdPaths, options, shortcut] = await Promise.all([
+        route(from, to, null, key, 0, false, via),
+        route(from, to, level, key, priority, true, via),
+        // Google-style shortcut route, only for placing pins; failure is fine.
+        route(from, to, "shortcut", key, 0, false, via).catch(() => null)
+      ]);
       last = { fromText, toText, viaText, from, to, via, level, priority };
-      current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to, via };
+      current = { std: stdPaths[0], shortcut: shortcut && shortcut[0], options: PR.rankOptions(options, priority), from, to, via };
       addRecent(last);
       clearChargers();
       select(0);
@@ -184,7 +189,7 @@
     if (current.sel !== undefined && current.sel !== i) clearChargers();
     current.sel = i;
     const pr = current.options[i];
-    const others = [current.std].concat(current.options.filter((_, j) => j !== i));
+    const others = [current.std, current.shortcut].filter(Boolean).concat(current.options.filter((_, j) => j !== i));
     let wps;
     if (current.via) {
       const viaAt = PR.alongRoute(pr, current.via);
