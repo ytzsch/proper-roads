@@ -185,13 +185,13 @@
     // fill any spare slots with evenly spaced points on main roads, away from existing pins.
     const spare = max - chosen.length;
     if (spare > 0 && total > 3000) {
-      const n = Math.min(spare, Math.max(1, Math.floor(total / 6000)));
+      const n = Math.min(spare, Math.max(1, Math.floor(total / 8000)));
       for (let k = 1; k <= n; k++) {
         const target = total * k / (n + 1);
         let best = null, bestScore = -Infinity;
         for (const s of prS) {
           if (s.at < 500 || total - s.at < 500 || nearAvoid(s.at)) continue;
-          if (chosen.some(c => Math.abs(c.at - s.at) < 1500)) continue;
+          if (chosen.some(c => Math.abs(c.at - s.at) < Math.min(4000, total / (max * 2)))) continue;
           const score = (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
           if (score > bestScore) { bestScore = score; best = s; }
         }

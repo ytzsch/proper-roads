@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "16", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "17", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -163,6 +163,19 @@
     } finally { $("goBtn").disabled = false; }
   }
 
+  // How many pins to send: Auto scales with distance (about one per 10 miles), 3 to 9 in total,
+  // keeping one slot for a stop if there is one.
+  // One-off: people on the old fixed default of 3 move to Auto.
+  if (!store.get("maxWpMigrated", false)) { if (+store.get("maxWp", 3) === 3) store.set("maxWp", "auto"); store.set("maxWpMigrated", true); }
+
+  function pinBudget(path, hasStop) {
+    const v = String(store.get("maxWp", "auto"));
+    const miles = path.distance / 1609.344;
+    let n = v === "auto" ? Math.min(9, Math.max(3, Math.round(miles / 10))) : +v || 3;
+    if (hasStop) n = Math.min(n, 8);
+    return n;
+  }
+
   let current = null;
   const LETTERS = "ABC";
 
@@ -175,10 +188,10 @@
     let wps;
     if (current.via) {
       const viaAt = PR.alongRoute(pr, current.via);
-      wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3), { avoidAt: [viaAt] })
+      wps = PR.pickWaypoints(pr, others, pinBudget(pr, true), { avoidAt: [viaAt] })
         .concat([{ lat: current.via.lat, lng: current.via.lng, roadClass: "stop", at: viaAt, stop: true }])
         .sort((a, b) => a.at - b.at);
-    } else wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3));
+    } else wps = PR.pickWaypoints(pr, others, pinBudget(pr, false));
     show(current.std, pr, wps, current.from, current.to);
     draw(current.std, current.options, i, wps);
     renderOptions();
@@ -641,7 +654,7 @@
     $("apiKey").value = store.get("key", "");
     $("server").value = store.get("server", "");
     $("ocmKey").value = store.get("ocmKey", "");
-    $("maxWp").value = String(store.get("maxWp", 3));
+    $("maxWp").value = String(store.get("maxWp", "auto"));
     $("settings").showModal();
   }
   $("settingsBtn").addEventListener("click", openSettings);
@@ -650,7 +663,7 @@
     store.set("key", $("apiKey").value.trim());
     store.set("server", $("server").value.trim());
     store.set("ocmKey", $("ocmKey").value.trim());
-    store.set("maxWp", +$("maxWp").value);
+    store.set("maxWp", $("maxWp").value === "auto" ? "auto" : +$("maxWp").value);
     status("Settings saved.");
   });
   if (!store.get("key", "") && !store.get("server", "")) status("Start by adding your routing server in Settings.");
