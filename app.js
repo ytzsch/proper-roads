@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "14", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "15", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -97,7 +97,7 @@
   // Returns all paths the server gives back. alt=true asks for up to 3 alternatives.
   async function route(from, to, level, key, priority, alt, via) {
     const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
-    const body = PR.routeBody(from, to, level, priority, via);
+    const body = PR.routeBody(from, to, level, priority, via, level != null ? store.get("avoids", []) : null);
     if (alt && !via) Object.assign(body, PR.ALTERNATIVES); // alternatives only work for A→B
     let r;
     try {
@@ -148,6 +148,7 @@
       const [stdPaths, options] = await Promise.all([route(from, to, null, key, 0, false, via), route(from, to, level, key, priority, true, via)]);
       last = { fromText, toText, viaText, from, to, via, level, priority };
       current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to, via };
+      addRecent(last);
       clearChargers();
       select(0);
       status("");
@@ -438,6 +439,132 @@
     } catch (e) { $("chargerStatus").textContent = e.message || "Couldn't load chargers."; }
   });
   $("rapidOnly").addEventListener("change", renderChargers);
+
+  // ---- Recent routes ----
+  const fmtWhen = t => {
+    const d = new Date(t), now = new Date();
+    const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    if (d.toDateString() === now.toDateString()) return "Today " + time;
+    if (new Date(now - 864e5).toDateString() === d.toDateString()) return "Yesterday " + time;
+    return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) + " " + time;
+  };
+  function addRecent(j) {
+    const list = store.get("recent", []).filter(r => !(r.fromText === j.fromText && r.toText === j.toText && (r.viaText || "") === (j.viaText || "")));
+    list.unshift({ fromText: j.fromText, toText: j.toText, viaText: j.viaText || "", level: j.level, priority: j.priority,
+      from: j.from, to: j.to, via: j.via || null, at: Date.now() });
+    store.set("recent", list.slice(0, 10)); renderRecent();
+  }
+  function renderRecent() {
+    const list = store.get("recent", []);
+    $("recentBox").hidden = !list.length;
+    $("recent").innerHTML = "";
+    list.forEach(r => {
+      const li = document.createElement("li");
+      const b = document.createElement("button"); b.type = "button"; b.className = "trip";
+      b.innerHTML = "<span></span><small></small>";
+      b.firstChild.textContent = (r.from?.label || r.fromText) + " → " + (r.via ? (r.via.label || r.viaText) + " → " : "") + (r.to?.label || r.toText);
+      b.lastChild.textContent = fmtWhen(r.at);
+      b.onclick = () => {
+        $("from").value = r.fromText; $("to").value = r.toText;
+        if (r.from) setPicked("from", r.fromText.trim(), r.from);
+        if (r.to) setPicked("to", r.toText.trim(), r.to);
+        if (r.viaText) { showStop(true); $("via").value = r.viaText; if (r.via) setPicked("via", r.viaText, r.via); } else showStop(false);
+        setSeg("tolerance", r.level); setSeg("priority", r.priority || 0);
+        plan(r.fromText, r.toText);
+      };
+      li.append(b); $("recent").append(li);
+    });
+  }
+  renderRecent();
+
+  // ---- Marked spots (from the app-icon shortcut) ----
+  const markLayer = L.layerGroup().addTo(map);
+  function renderMarks() {
+    const list = store.get("marks", []);
+    $("marksCount").textContent = list.length ? "(" + list.length + ")" : "";
+    $("marks").innerHTML = "";
+    if (!list.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "None yet."; $("marks").append(li); }
+    list.forEach((m, i) => {
+      const li = document.createElement("li"); li.className = "row";
+      const t = document.createElement("span"); t.textContent = fmtWhen(m.at);
+      const show = document.createElement("button"); show.type = "button"; show.className = "ghost small"; show.textContent = "Show";
+      show.onclick = () => {
+        markLayer.clearLayers();
+        L.circleMarker([m.lat, m.lng], { radius: 9, color: "#b42318", weight: 3, fillOpacity: .2 }).addTo(markLayer);
+        map.setView([m.lat, m.lng], 16);
+        status("Tap the lane near the red circle to avoid it.");
+        if (window.innerWidth <= 760) document.getElementById("map").scrollIntoView({ behavior: "smooth" });
+      };
+      const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "✕";
+      del.setAttribute("aria-label", "Remove marked spot");
+      del.onclick = () => { const l = store.get("marks", []); l.splice(i, 1); store.set("marks", l); markLayer.clearLayers(); renderMarks(); };
+      li.append(t, show, del); $("marks").append(li);
+    });
+  }
+  function markHere(fromShortcut) {
+    if (!navigator.geolocation) { status("This phone can't share its location here.", true); return; }
+    status("Marking this spot…");
+    navigator.geolocation.getCurrentPosition(pos => {
+      const list = store.get("marks", []);
+      list.unshift({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: Math.round(pos.coords.accuracy), at: Date.now() });
+      store.set("marks", list.slice(0, 50)); renderMarks();
+      status("Spot marked. Deal with it later under Marked spots." + (fromShortcut ? " You can close the app." : ""));
+    }, () => status("Couldn't get your location. Allow location for this app and try again.", true), { enableHighAccuracy: true, timeout: 15000 });
+  }
+  $("markNowBtn").addEventListener("click", () => markHere(false));
+  renderMarks();
+  if (new URLSearchParams(location.search).has("mark")) {
+    try { history.replaceState(history.state, "", location.pathname); } catch (e) {}
+    $("marksBox").open = true;
+    markHere(true);
+  }
+
+  // ---- Avoided roads ----
+  const avoidLayer = L.layerGroup().addTo(map);
+  function renderAvoids() {
+    const list = store.get("avoids", []);
+    $("avoidCount").textContent = list.length ? "(" + list.length + ")" : "";
+    $("avoids").innerHTML = ""; avoidLayer.clearLayers();
+    if (!list.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "None yet."; $("avoids").append(li); }
+    list.forEach((a, i) => {
+      L.circle([a.lat, a.lng], { radius: 40, color: "#b42318", weight: 2, fillOpacity: .15, dashArray: "4 4" }).addTo(avoidLayer);
+      const li = document.createElement("li"); li.className = "row";
+      const t = document.createElement("span"); t.textContent = a.name || ("Near " + a.lat.toFixed(4) + ", " + a.lng.toFixed(4));
+      const show = document.createElement("button"); show.type = "button"; show.className = "ghost small"; show.textContent = "Show";
+      show.onclick = () => map.setView([a.lat, a.lng], 16);
+      const del = document.createElement("button"); del.type = "button"; del.className = "del"; del.textContent = "✕";
+      del.setAttribute("aria-label", "Stop avoiding this road");
+      del.onclick = () => { const l = store.get("avoids", []); l.splice(i, 1); store.set("avoids", l); renderAvoids(); };
+      li.append(t, show, del); $("avoids").append(li);
+    });
+  }
+  async function nameRoad(lat, lng) {
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/reverse?" + new URLSearchParams({ lat, lon: lng, format: "jsonv2", zoom: "17" }));
+      const j = await r.json();
+      const a = j.address || {};
+      return [a.road, a.village || a.hamlet || a.town || a.suburb].filter(Boolean).join(", ") || null;
+    } catch (e) { return null; }
+  }
+  map.on("click", e => {
+    if (map.getZoom() < 13) { status("Zoom in on the lane, then tap it to avoid it."); return; }
+    const el = document.createElement("div"); el.className = "ch-pop";
+    const b = document.createElement("button"); b.type = "button"; b.className = "primary"; b.textContent = "Avoid this lane";
+    const n = document.createElement("div"); n.className = "ch-meta"; n.textContent = "Minor roads within about 40 m of this spot will be avoided.";
+    el.append(b, n);
+    const pop = L.popup().setLatLng(e.latlng).setContent(el).openOn(map);
+    b.onclick = async () => {
+      const { lat, lng } = e.latlng;
+      const list = store.get("avoids", []);
+      list.push({ lat: +lat.toFixed(6), lng: +lng.toFixed(6), at: Date.now() });
+      store.set("avoids", list); renderAvoids(); map.closePopup(pop); markLayer.clearLayers();
+      status("Lane avoided." + (current ? " Re-planning…" : ""));
+      if (current) plan($("from").value, $("to").value);
+      const name = await nameRoad(lat, lng);
+      if (name) { const l = store.get("avoids", []); const it = l.find(x => x.lat === +lat.toFixed(6) && x.lng === +lng.toFixed(6)); if (it) { it.name = name; store.set("avoids", l); renderAvoids(); } }
+    };
+  });
+  renderAvoids();
 
   // ---- Saved places ----
   function renderPlaces() {

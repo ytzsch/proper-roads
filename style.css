@@ -108,3 +108,12 @@ dialog .actions{margin-top:16px}
 .ch-pop{display:grid;gap:6px;min-width:180px;font:14px/1.35 Overpass,system-ui,sans-serif}
 .ch-pop button{min-height:40px}
 .ch-meta{color:#5b6b62;font-size:13px}.ch-note{color:#5b6b62;font-size:11px}
+.drawer{border-top:1px solid var(--line);padding-top:10px}
+.drawer summary{cursor:pointer;font-weight:700;font-size:15px;min-height:36px;display:flex;align-items:center;gap:6px}
+.list{list-style:none;margin:8px 0;padding:0;display:grid;gap:8px}
+.list .trip{flex:1;width:100%;display:grid;justify-items:start;text-align:left;background:var(--surface);border:2px solid var(--line);color:var(--ink);font-weight:600}
+.list .trip small{font-weight:400;color:var(--muted);font-size:13px}
+.list .row{display:flex;align-items:center;gap:8px}
+.list .row span{flex:1;font-size:14px}
+.list .del{background:none;border:0;color:var(--muted);min-width:44px}
+button.small{min-height:36px;padding:4px 12px;font-size:14px}

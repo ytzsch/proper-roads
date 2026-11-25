@@ -23,7 +23,14 @@
     { name: "Shortest", hint: "The most direct route on proper roads, even if it's a bit slower.", distance: 400 }
   ];
 
-  function customModel(level, priority) {
+  // Small octagon (radius r metres) around a point, as GeoJSON coordinates.
+  function octagon(lat, lng, r) {
+    const k = Math.PI / 180, dLat = r / 111320, dLng = r / (111320 * Math.cos(lat * k)), ring = [];
+    for (let i = 0; i <= 8; i++) { const a = (i % 8) * Math.PI / 4; ring.push([+(lng + dLng * Math.cos(a)).toFixed(6), +(lat + dLat * Math.sin(a)).toFixed(6)]); }
+    return [ring];
+  }
+
+  function customModel(level, priority, avoids) {
     const t = TOLERANCE[level] || TOLERANCE[1];
     const d = (PRIORITY[priority] || PRIORITY[0]).distance;
     const m = {
@@ -39,10 +46,18 @@
       ]
     };
     if (d != null) m.distance_influence = d;
+    // Personal avoid list: never use minor roads inside these spots (main roads through them still allowed).
+    if (avoids && avoids.length) {
+      m.areas = { type: "FeatureCollection", features: avoids.map((a, i) => ({
+        type: "Feature", id: "avoid" + i, properties: {}, geometry: { type: "Polygon", coordinates: octagon(a.lat, a.lng, 40) }
+      })) };
+      const inAny = "(" + avoids.map((_, i) => "in_avoid" + i).join(" || ") + ")";
+      m.priority.push({ if: inAny + " && road_class != MOTORWAY && road_class != TRUNK && road_class != PRIMARY && road_class != SECONDARY", multiply_by: 0.01 });
+    }
     return m;
   }
 
-  function routeBody(from, to, level, priority, via) {
+  function routeBody(from, to, level, priority, via, avoids) {
     const pts = [from].concat(via ? [via] : [], [to]);
     const body = {
       profile: "car",
@@ -52,7 +67,7 @@
       locale: "en",
       details: ["road_class"]
     };
-    if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority); }
+    if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority, avoids); }
     return body;
   }
 
