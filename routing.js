@@ -159,8 +159,26 @@
       return { point: best || centre, score: peak.d * run.length };
     });
 
-    return picks.sort((a, b) => b.score - a.score).slice(0, max)
-      .map(x => x.point).sort((a, b) => a.at - b.at)
+    let chosen = picks.sort((a, b) => b.score - a.score).slice(0, max).map(x => x.point);
+
+    // Google's own route isn't our "usual" one, so always pin the chosen route:
+    // fill any spare slots with evenly spaced points on main roads, away from existing pins.
+    const spare = max - chosen.length;
+    if (spare > 0 && total > 3000) {
+      const n = Math.min(spare, Math.max(1, Math.floor(total / 6000)));
+      for (let k = 1; k <= n; k++) {
+        const target = total * k / (n + 1);
+        let best = null, bestScore = -Infinity;
+        for (const s of prS) {
+          if (s.at < 500 || total - s.at < 500) continue;
+          if (chosen.some(c => Math.abs(c.at - s.at) < 1500)) continue;
+          const score = (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
+          if (score > bestScore) { bestScore = score; best = s; }
+        }
+        if (best) chosen.push(best);
+      }
+    }
+    return chosen.sort((a, b) => a.at - b.at)
       .map(s => ({ lat: s.p[1], lng: s.p[0], roadClass: s.c }));
   }
 

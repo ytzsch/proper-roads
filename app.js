@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "7", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "8", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -181,13 +181,13 @@
 
     const saved = s.laneMetres - p.laneMetres, extra = pr.distance - std.distance;
     $("verdict").textContent = saved < 400
-      ? "The usual route already sticks to proper roads, so Google should be fine as it is."
+      ? "Little difference from the usual route here, but Google may still pick lanes, so the route is pinned anyway."
       : "Skips " + PR.fmtMiles(saved) + " of lanes for " + (extra > 0 ? PR.fmtMiles(extra) + " extra." : "no extra distance.");
-    $("gmaps").href = PR.googleMapsUrl(from, to, saved < 400 ? [] : wps);
-    $("wpHint").textContent = saved < 400 || !wps.length
-      ? "Opens Google Maps with no waypoints."
+    $("gmaps").href = PR.googleMapsUrl(from, to, wps);
+    $("wpHint").textContent = !wps.length
+      ? "Short trip, so it opens Google Maps with no waypoints."
       : "Opens Google Maps with " + wps.length + " waypoint" + (wps.length > 1 ? "s" : "") +
-        " on main roads to keep it off the lanes. Tap through them as stops.";
+        " on main roads to hold it to this route. Tap through them as stops. Google should show one route, not several.";
     $("results").hidden = false;
   }
 
