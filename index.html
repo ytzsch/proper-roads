@@ -30,13 +30,18 @@
       <div class="field">
         <label for="from">From</label>
         <div class="with-btn">
-          <input id="from" placeholder="Postcode, place or address" required>
+          <input id="from" placeholder="Postcode, place or saved place" required list="placeList">
           <button type="button" class="ghost" id="hereBtn" title="Use my location">Here</button>
         </div>
       </div>
       <div class="field">
         <label for="to">To</label>
-        <input id="to" placeholder="Postcode, place or address" required>
+        <div class="with-btn">
+          <input id="to" placeholder="Postcode, place or saved place" required list="placeList">
+          <button type="button" class="ghost" id="swapBtn" title="Swap From and To" aria-label="Swap From and To">⇅</button>
+        </div>
+        <div class="chips" id="places" aria-label="Saved places"></div>
+        <datalist id="placeList"></datalist>
       </div>
       <div class="field">
         <label for="tolerance">Lane tolerance</label>
@@ -53,11 +58,20 @@
       <div class="actions">
         <button class="primary" type="submit" id="goBtn">Find proper route</button>
         <button class="ghost" type="button" id="saveBtn" hidden>Save journey</button>
+        <button class="ghost" type="button" id="savePlaceBtn" hidden>Save destination</button>
+      </div>
+      <div class="save-place" id="savePlaceBox" hidden>
+        <label for="placeName">Name this place</label>
+        <div class="with-btn">
+          <input id="placeName" maxlength="30" placeholder="e.g. Sailing club">
+          <button type="button" class="primary" id="placeOk">Save</button>
+        </div>
       </div>
       <p class="status" id="status" role="status"></p>
     </form>
 
     <div id="results" hidden>
+      <div class="options" id="options" role="group" aria-label="Route options" hidden></div>
       <div class="compare">
         <div class="route-card std">
           <h2>Usual route</h2>
@@ -66,7 +80,7 @@
           <p class="lanes" id="stdLanes"></p>
         </div>
         <div class="route-card pr">
-          <h2>Proper roads</h2>
+          <h2 id="prTitle">Proper roads</h2>
           <p class="big" id="prTime"></p>
           <p class="sub" id="prDist"></p>
           <p class="lanes" id="prLanes"></p>

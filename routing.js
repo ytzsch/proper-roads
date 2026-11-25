@@ -164,6 +164,27 @@
       .map(s => ({ lat: s.p[1], lng: s.p[0], roadClass: s.c }));
   }
 
+  // Ask the server for up to 3 genuinely different routes.
+  const ALTERNATIVES = {
+    algorithm: "alternative_route",
+    "alternative_route.max_paths": 3,
+    "alternative_route.max_weight_factor": 1.4,
+    "alternative_route.max_share_factor": 0.6,
+    "lm.disable": true
+  };
+
+  // Order options by what the person asked for: quickest by time, shortest by distance,
+  // balanced by a blend. Lane miles count against every option.
+  function rankOptions(paths, priority) {
+    const score = p => {
+      const lanes = laneStats(p).laneMetres;
+      const t = p.time / 1000, d = p.distance;
+      const base = priority === 2 ? d / 13.4 : priority === 1 ? (t + d / 13.4) / 2 : t; // 13.4 m/s ≈ 30mph
+      return base + lanes / 5;
+    };
+    return paths.slice().sort((a, b) => score(a) - score(b));
+  }
+
   const ll = p => p.lat.toFixed(6) + "," + p.lng.toFixed(6);
 
   function googleMapsUrl(from, to, waypoints) {
@@ -179,6 +200,6 @@
   }
   const fmtMiles = metres => (metres / 1609.344).toFixed(1) + " miles";
 
-  const api = { TOLERANCE, PRIORITY, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
+  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
   if (typeof module !== "undefined") module.exports = api; else root.ProperRoads = api;
 })(this);

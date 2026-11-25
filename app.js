@@ -19,16 +19,26 @@
   const layer = L.layerGroup().addTo(map);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-  function draw(std, pr, wps) {
+  function draw(std, options, sel, wps) {
     layer.clearLayers();
     const toLL = p => p.points.coordinates.map(c => [c[1], c[0]]);
+    const bounds = L.latLngBounds([]);
     L.polyline(toLL(std), { color: css("--std"), weight: 5, opacity: .8, dashArray: "8 8" }).addTo(layer);
-    const prLine = L.polyline(toLL(pr), { color: css("--pr"), weight: 6, opacity: .9 }).addTo(layer);
+    bounds.extend(L.polyline(toLL(std)).getBounds());
+    // unselected options first (thin, tappable), selected on top
+    options.forEach((p, i) => {
+      if (i === sel) return;
+      const l = L.polyline(toLL(p), { color: css("--pr"), weight: 4, opacity: .35 }).addTo(layer);
+      l.on("click", () => select(i));
+      bounds.extend(l.getBounds());
+    });
+    const prLine = L.polyline(toLL(options[sel]), { color: css("--pr"), weight: 7, opacity: .95 }).addTo(layer);
+    bounds.extend(prLine.getBounds());
     wps.forEach((w, i) => L.marker([w.lat, w.lng], {
       icon: L.divIcon({ className: "wp-icon", html: String(i + 1), iconSize: [20, 20] }),
       title: "Waypoint " + (i + 1) + " (" + w.roadClass + " road)"
     }).addTo(layer));
-    map.fitBounds(prLine.getBounds().extend(L.polyline(toLL(std)).getBounds()), { padding: [30, 30] });
+    map.fitBounds(bounds, { padding: [30, 30] });
   }
 
   // ---- Places ----
@@ -41,6 +51,8 @@
   async function geocode(text, key) {
     const q = text.trim();
     if (/^(here|my location)$/i.test(q) && here) return here;
+    const saved = store.get("places", []).find(p => p.name.toLowerCase() === q.toLowerCase());
+    if (saved) return { lat: saved.lat, lng: saved.lng, label: saved.name };
     const m = q.match(LATLNG);
     if (m) return { lat: +m[1], lng: +m[2], label: q };
     if (POSTCODE.test(q)) {
@@ -66,18 +78,24 @@
     try { const j = await r.json(); return j.message || fallback; } catch (e) { return fallback; }
   }
 
-  async function route(from, to, level, key, priority) {
+  // Returns all paths the server gives back. alt=true asks for up to 3 alternatives.
+  async function route(from, to, level, key, priority, alt) {
     const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
+    const body = PR.routeBody(from, to, level, priority);
+    if (alt) Object.assign(body, PR.ALTERNATIVES);
     let r;
     try {
-      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(PR.routeBody(from, to, level, priority)) });
+      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     } catch (e) {
       throw new Error(usingOwn() ? "Can't reach your routing server. Is Tailscale on, and has the server finished building?" : "Couldn't reach GraphHopper. Check your connection.");
     }
-    if (!r.ok) throw new Error(await ghError(r, "Routing failed."));
-    const path = (await r.json()).paths?.[0];
-    if (!path) throw new Error("No route found between those places.");
-    return path;
+    if (!r.ok) {
+      if (alt) return route(from, to, level, key, priority, false); // fall back to a single route
+      throw new Error(await ghError(r, "Routing failed."));
+    }
+    const paths = (await r.json()).paths || [];
+    if (!paths.length) throw new Error("No route found between those places.");
+    return paths;
   }
 
   // ---- Planning ----
@@ -96,22 +114,53 @@
     $("goBtn").disabled = true; status("Finding routes…");
     try {
       const [from, to] = await Promise.all([geocode(fromText, key), geocode(toText, key)]);
-      const [std, pr] = await Promise.all([route(from, to, null, key), route(from, to, level, key, priority)]);
-      const wps = PR.pickWaypoints(pr, std, +store.get("maxWp", 3));
+      const [stdPaths, options] = await Promise.all([route(from, to, null, key), route(from, to, level, key, priority, true)]);
       last = { fromText, toText, from, to, level, priority };
-      show(std, pr, wps, from, to);
-      draw(std, pr, wps);
+      current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to };
+      select(0);
       status("");
       $("saveBtn").hidden = false;
+      $("savePlaceBtn").hidden = store.get("places", []).some(p => p.name.toLowerCase() === toText.trim().toLowerCase());
     } catch (e) {
       status(e.message || "Something went wrong. Check your connection.", true);
     } finally { $("goBtn").disabled = false; }
+  }
+
+  let current = null;
+  const LETTERS = "ABC";
+
+  function select(i) {
+    if (!current) return;
+    current.sel = i;
+    const pr = current.options[i];
+    const wps = PR.pickWaypoints(pr, current.std, +store.get("maxWp", 3));
+    show(current.std, pr, wps, current.from, current.to);
+    draw(current.std, current.options, i, wps);
+    renderOptions();
+  }
+
+  function renderOptions() {
+    const box = $("options"), { options, sel } = current;
+    box.hidden = options.length < 2;
+    box.innerHTML = "";
+    if (options.length < 2) return;
+    options.forEach((p, i) => {
+      const st = PR.laneStats(p);
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "opt" + (i === sel ? " on" : "");
+      b.setAttribute("aria-pressed", String(i === sel));
+      b.innerHTML = "<span class=\"letter\">" + LETTERS[i] + "</span><span class=\"o-main\">" + PR.fmtTime(p.time) +
+        "</span><span class=\"o-sub\">" + PR.fmtMiles(p.distance) + " · " + (st.laneMetres < 200 ? "no lanes" : PR.fmtMiles(st.laneMetres) + " lanes") + "</span>";
+      b.onclick = () => select(i);
+      box.append(b);
+    });
   }
 
   function show(std, pr, wps, from, to) {
     const s = PR.laneStats(std), p = PR.laneStats(pr);
     $("stdTime").textContent = PR.fmtTime(std.time);
     $("stdDist").textContent = PR.fmtMiles(std.distance);
+    $("prTitle").textContent = current && current.options.length > 1 ? "Proper roads · " + LETTERS[current.sel] : "Proper roads";
     $("prTime").textContent = PR.fmtTime(pr.time);
     $("prDist").textContent = PR.fmtMiles(pr.distance);
     const lanes = st => st.laneMetres < 200 ? "No lanes" : "<b>" + PR.fmtMiles(st.laneMetres) + "</b> of lanes";
@@ -141,6 +190,42 @@
       { enableHighAccuracy: true, timeout: 10000 }
     );
   });
+
+  // ---- Saved places ----
+  function renderPlaces() {
+    const list = store.get("places", []);
+    $("placeList").innerHTML = "";
+    $("places").innerHTML = "";
+    list.forEach((p, i) => {
+      const o = document.createElement("option"); o.value = p.name; $("placeList").append(o);
+      const chip = document.createElement("span"); chip.className = "chip";
+      const b = document.createElement("button"); b.type = "button"; b.textContent = p.name;
+      b.title = "Go to " + p.name;
+      b.onclick = () => { $("to").value = p.name; };
+      const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = "✕";
+      x.setAttribute("aria-label", "Remove " + p.name);
+      x.onclick = () => { const l = store.get("places", []); l.splice(i, 1); store.set("places", l); renderPlaces(); };
+      chip.append(b, x); $("places").append(chip);
+    });
+  }
+  $("savePlaceBtn").addEventListener("click", () => {
+    $("savePlaceBox").hidden = false;
+    $("placeName").value = last && last.to.label && !/^-?\d/.test(last.to.label) ? last.to.label : "";
+    $("placeName").focus();
+  });
+  $("placeOk").addEventListener("click", () => {
+    const name = $("placeName").value.trim();
+    if (!name || !last) return;
+    const list = store.get("places", []).filter(p => p.name.toLowerCase() !== name.toLowerCase());
+    list.push({ name, lat: last.to.lat, lng: last.to.lng });
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    store.set("places", list); renderPlaces();
+    $("savePlaceBox").hidden = true; $("savePlaceBtn").hidden = true;
+    $("to").value = name; status("Saved “" + name + "”.");
+  });
+  $("placeName").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("placeOk").click(); } });
+  $("swapBtn").addEventListener("click", () => { const f = $("from").value; $("from").value = $("to").value; $("to").value = f; });
+  renderPlaces();
 
   // ---- Saved journeys ----
   function renderSaved() {
