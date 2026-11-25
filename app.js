@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "21", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "22", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -189,14 +189,16 @@
     if (current.sel !== undefined && current.sel !== i) clearChargers();
     current.sel = i;
     const pr = current.options[i];
-    const others = [current.std, current.shortcut].filter(Boolean).concat(current.options.filter((_, j) => j !== i));
+    // Shortcut route first: it's the "urgent" comparison.
+    const others = (current.shortcut ? [current.shortcut] : []).concat([current.std], current.options.filter((_, j) => j !== i));
+    const urgent = current.shortcut ? 1 : 0;
     let wps;
     if (current.via) {
       const viaAt = PR.alongRoute(pr, current.via);
-      wps = PR.pickWaypoints(pr, others, pinBudget(pr, true), { avoidAt: [viaAt] })
+      wps = PR.pickWaypoints(pr, others, pinBudget(pr, true), { avoidAt: [viaAt], urgent })
         .concat([{ lat: current.via.lat, lng: current.via.lng, roadClass: "stop", at: viaAt, stop: true }])
         .sort((a, b) => a.at - b.at);
-    } else wps = PR.pickWaypoints(pr, others, pinBudget(pr, false));
+    } else wps = PR.pickWaypoints(pr, others, pinBudget(pr, false), { urgent });
     show(current.std, pr, wps, current.from, current.to);
     draw(current.std, current.options, i, wps);
     renderOptions();

@@ -190,14 +190,20 @@
   // `others` is the usual route plus the other options: anywhere the chosen route
   // splits from any of them is a place Google could wander off, so pin it there.
   function pickWaypoints(prPath, others, max, opts) {
-    const o = Object.assign({ threshold: 250, step: 150, avoidAt: [] }, opts || {});
+    // opts.urgent: how many of `others` (from the front) are shortcut-style routes. Wherever ours
+    // leaves one of those, Google is tempted to cut through, so those spots get pins first.
+    const o = Object.assign({ threshold: 250, step: 150, avoidAt: [], urgent: 0 }, opts || {});
     const nearAvoid = at => o.avoidAt.some(a => Math.abs(a - at) < 1500);
     const list = (Array.isArray(others) ? others : [others]).filter(Boolean);
     const prS = resample(prPath.points.coordinates, classPerPoint(prPath), o.step);
     markUnsafe(prS, linkPerPoint(prPath), prPath.points.coordinates.length, 2); // ±300 m clear
     const lines = list.map(p => resample(p.points.coordinates, classPerPoint(p), 50).map(s => s.p));
     const total = prS[prS.length - 1].at;
-    prS.forEach(s => { s.d = lines.length ? Math.max(...lines.map(l => distToLine(s.p, l))) : 0; });
+    prS.forEach(s => {
+      const ds = lines.map(l => distToLine(s.p, l));
+      s.d = ds.length ? Math.max(...ds) : 0;
+      s.du = o.urgent ? Math.max(...ds.slice(0, o.urgent)) : 0; // distance from the shortcut route(s)
+    });
 
     const runs = [];
     let cur = null;
@@ -227,6 +233,18 @@
         const rank = MAJOR_RANK[s.c] || 0;
         const score = (s.bad ? -5000 : 0) + rank * 1000 - Math.abs(s.at - mid) / 10;
         if (score > bestScore) { bestScore = score; best = s; }
+      }
+      // Shortcut-tempting stretches outrank everything else, however short they are.
+      const urgentPeak = Math.max(...run.map(x => x.du));
+      const urgent = urgentPeak > o.threshold;
+      if (urgent) {
+        // Pin where ours is furthest from the shortcut (but on a clean spot), so Google can't reach it via the lane.
+        let ub = null, us = -Infinity;
+        for (const s of run) {
+          const sc = (s.bad ? -1e6 : 0) + s.du * 10 + (MAJOR_RANK[s.c] || 0) * 200;
+          if (sc > us) { us = sc; ub = s; }
+        }
+        return { point: ub || best || centre, score: 1e12 + urgentPeak * run.length };
       }
       return { point: best || centre, score: peak.d * run.length };
     });
