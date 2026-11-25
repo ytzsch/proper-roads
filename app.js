@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "23", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "24", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -612,13 +612,35 @@
     } catch (e) { return null; }
   }
   map.on("click", e => {
-    if (map.getZoom() < 13) { status("Zoom in on the lane, then tap it to avoid it."); return; }
     const el = document.createElement("div"); el.className = "ch-pop";
-    const b = document.createElement("button"); b.type = "button"; b.className = "primary"; b.textContent = "Avoid this lane";
+    // Add a stop here (works at any zoom).
+    const hasStop = !$("viaField").hidden && $("via").value.trim();
+    const st = document.createElement("button"); st.type = "button"; st.className = "primary";
+    st.textContent = hasStop ? "Make this the stop instead" : "Add a stop here";
+    st.onclick = async () => {
+      map.closePopup();
+      const { lat, lng } = e.latlng;
+      const name = (await nameRoad(lat, lng)) || "Stop on the map";
+      showStop(true);
+      $("via").value = name;
+      setPicked("via", name, { lat: +lat.toFixed(6), lng: +lng.toFixed(6), label: name });
+      $("viaHint").hidden = true;
+      if ($("from").value.trim() && $("to").value.trim()) plan($("from").value, $("to").value);
+      else status("Stop added. Fill in From and To, then Find proper route.");
+    };
+    el.append(st);
+    if (map.getZoom() < 13) {
+      const z = document.createElement("div"); z.className = "ch-meta"; z.textContent = "Zoom in further to avoid a lane here.";
+      el.append(z);
+      L.popup().setLatLng(e.latlng).setContent(el).openOn(map);
+      return;
+    }
+    const b = document.createElement("button"); b.type = "button"; b.className = "ghost"; b.textContent = "Avoid this lane";
     const n = document.createElement("div"); n.className = "ch-meta"; n.textContent = "Minor roads within about 40 m of this spot. A and B roads stay usable.";
     const b2 = document.createElement("button"); b2.type = "button"; b2.className = "ghost"; b2.textContent = "Avoid this road, even an A or B road";
     const n2 = document.createElement("div"); n2.className = "ch-meta"; n2.textContent = "For B roads that are really lanes. Tap mid-road, away from junctions.";
-    el.append(b, n, b2, n2);
+    const sep = document.createElement("hr"); sep.className = "pop-sep";
+    el.append(sep, b, n, b2, n2);
     const pop = L.popup().setLatLng(e.latlng).setContent(el).openOn(map);
     const add = async all => {
       const { lat, lng } = e.latlng;
