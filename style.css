@@ -88,3 +88,5 @@ dialog .actions{margin-top:16px}
 .journey{margin:0 0 10px;font-size:14px;font-weight:600;overflow-wrap:anywhere}
 .end-pin{border-radius:50%;border:2px solid #fff;color:#fff;font:800 13px/22px Overpass,sans-serif;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
 .end-pin.start{background:var(--green)}.end-pin.finish{background:#16201b}
+.version{margin:0;font-size:13px;color:var(--muted)}
+.version.warn{color:var(--danger);font-weight:600}
