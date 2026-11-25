@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "12", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "13", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
