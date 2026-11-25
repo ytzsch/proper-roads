@@ -30,18 +30,21 @@
       <div class="field">
         <label for="from">From</label>
         <div class="with-btn">
-          <input id="from" placeholder="Postcode, place or saved place" required list="placeList">
+          <input id="from" placeholder="Postcode, place or saved place" required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="fromSugg">
           <button type="button" class="ghost" id="hereBtn" title="Use my location">Here</button>
         </div>
+        <ul class="sugg" id="fromSugg" role="listbox" hidden></ul>
+        <p class="matched" id="fromMatched" hidden></p>
       </div>
       <div class="field">
         <label for="to">To</label>
         <div class="with-btn">
-          <input id="to" placeholder="Postcode, place or saved place" required list="placeList">
+          <input id="to" placeholder="Postcode, place or saved place" required autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="toSugg">
           <button type="button" class="ghost" id="swapBtn" title="Swap From and To" aria-label="Swap From and To">⇅</button>
         </div>
+        <ul class="sugg" id="toSugg" role="listbox" hidden></ul>
+        <p class="matched" id="toMatched" hidden></p>
         <div class="chips" id="places" aria-label="Saved places"></div>
-        <datalist id="placeList"></datalist>
       </div>
       <div class="field">
         <label for="tolerance">Lane tolerance</label>
@@ -71,6 +74,7 @@
     </form>
 
     <div id="results" hidden>
+      <p class="journey" id="journey"></p>
       <div class="options" id="options" role="group" aria-label="Route options" hidden></div>
       <div class="compare">
         <div class="route-card std">

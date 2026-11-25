@@ -38,6 +38,11 @@
       icon: L.divIcon({ className: "wp-icon", html: String(i + 1), iconSize: [20, 20] }),
       title: "Waypoint " + (i + 1) + " (" + w.roadClass + " road)"
     }).addTo(layer));
+    const pin = (pt, cls, txt, title) => L.marker([pt.lat, pt.lng], {
+      icon: L.divIcon({ className: "end-pin " + cls, html: txt, iconSize: [26, 26] }), title, zIndexOffset: 1000
+    }).addTo(layer);
+    pin(current.from, "start", "S", "Start: " + current.from.label);
+    pin(current.to, "finish", "F", "Finish: " + current.to.label);
     map.fitBounds(bounds, { padding: [30, 30] });
   }
 
@@ -48,8 +53,10 @@
   const server = () => store.get("server", "").replace(/\/+$/, "");
   const usingOwn = () => !!server();
 
-  async function geocode(text, key) {
+  async function geocode(text, key, field) {
     const q = text.trim();
+    const pk = field && picked[field];
+    if (pk && pk.text === q) return pk;
     if (/^(here|my location)$/i.test(q) && here) return here;
     const saved = store.get("places", []).find(p => p.name.toLowerCase() === q.toLowerCase());
     if (saved) return { lat: saved.lat, lng: saved.lng, label: saved.name };
@@ -57,13 +64,13 @@
     if (m) return { lat: +m[1], lng: +m[2], label: q };
     if (POSTCODE.test(q)) {
       const r = await fetch("https://api.postcodes.io/postcodes/" + encodeURIComponent(q));
-      if (r.ok) { const j = await r.json(); return { lat: j.result.latitude, lng: j.result.longitude, label: j.result.postcode }; }
+      if (r.ok) { const j = (await r.json()).result; return { lat: j.latitude, lng: j.longitude, label: [j.postcode, j.admin_ward, j.admin_district].filter(Boolean).join(", ") }; }
     }
     if (usingOwn()) {
       const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", limit: "1", countrycodes: "gb" }));
       const hit = r.ok ? (await r.json())[0] : null;
       if (!hit) throw new Error("Couldn't find “" + q + "”. Try a postcode.");
-      return { lat: +hit.lat, lng: +hit.lon, label: hit.name || hit.display_name.split(",")[0] };
+      return { lat: +hit.lat, lng: +hit.lon, label: hit.display_name.split(",").slice(0, 3).map(x => x.trim()).join(", ") };
     }
     const r = await fetch(GH + "/geocode?" + new URLSearchParams({ q, locale: "en", limit: "1", key }));
     if (!r.ok) throw new Error(await ghError(r, "Couldn't look up “" + q + "”."));
@@ -113,7 +120,9 @@
     const level = +$("tolerance").value, priority = +$("priority").value;
     $("goBtn").disabled = true; status("Finding routes…");
     try {
-      const [from, to] = await Promise.all([geocode(fromText, key), geocode(toText, key)]);
+      const [from, to] = await Promise.all([geocode(fromText, key, "from"), geocode(toText, key, "to")]);
+      setPicked("from", fromText.trim(), from); setPicked("to", toText.trim(), to);
+      $("journey").textContent = from.label + "  →  " + to.label;
       const [stdPaths, options] = await Promise.all([route(from, to, null, key), route(from, to, level, key, priority, true)]);
       last = { fromText, toText, from, to, level, priority };
       current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to };
@@ -185,23 +194,122 @@
     if (!navigator.geolocation) { status("This browser can't share your location.", true); return; }
     status("Getting your location…");
     navigator.geolocation.getCurrentPosition(
-      pos => { here = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: "My location" }; $("from").value = "My location"; status(""); },
+      pos => { here = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: "My location" }; $("from").value = "My location"; setPicked("from", "My location", here); status(""); },
       () => status("Location was blocked. Type a postcode instead.", true),
       { enableHighAccuracy: true, timeout: 10000 }
     );
   });
 
+  // ---- Picking places: suggestions as you type ----
+  const picked = { from: null, to: null };
+  function setPicked(field, text, place) {
+    picked[field] = place ? Object.assign({}, place, { text }) : null;
+    showMatched(field);
+  }
+  function showMatched(field) {
+    const el = $(field + "Matched"), p = picked[field];
+    el.hidden = !p;
+    if (p) el.textContent = "✓ " + (p.label || p.text);
+  }
+
+  const BRISTOL = { lat: 51.5, lon: -2.5 };
+  const GB_BBOX = "-8.7,49.8,1.8,60.9";
+  const photonLabel = pr => {
+    const first = pr.name || [pr.housenumber, pr.street].filter(Boolean).join(" ") || pr.postcode;
+    const rest = [pr.street && pr.name ? pr.street : null, pr.city || pr.town || pr.village || pr.district, pr.county]
+      .filter((x, i, a) => x && x !== first && a.indexOf(x) === i);
+    return [first].concat(rest).join(", ");
+  };
+
+  async function suggestions(q) {
+    const ql = q.toLowerCase(), out = [];
+    store.get("places", []).filter(p => p.name.toLowerCase().includes(ql))
+      .forEach(p => out.push({ text: p.name, label: p.name, sub: "Saved place", lat: p.lat, lng: p.lng }));
+    if (q.length < 3) return out;
+    try {
+      if (/^[A-Z]{1,2}\d/i.test(q)) {
+        const r = await fetch("https://api.postcodes.io/postcodes/" + encodeURIComponent(q) + "/autocomplete?limit=5");
+        const j = r.ok ? await r.json() : {};
+        (j.result || []).forEach(pc => out.push({ text: pc, label: pc, sub: "Postcode", postcode: pc }));
+      }
+      if (out.length < 6) {
+        const r = await fetch("https://photon.komoot.io/api/?" + new URLSearchParams({ q, limit: "6", lang: "en", lat: BRISTOL.lat, lon: BRISTOL.lon, bbox: GB_BBOX }));
+        const j = r.ok ? await r.json() : { features: [] };
+        j.features.forEach(f => {
+          const label = photonLabel(f.properties);
+          if (!out.some(o => o.label === label)) out.push({
+            text: label.split(",")[0], label, sub: (f.properties.osm_value || "").replace(/_/g, " "),
+            lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+          });
+        });
+      }
+    } catch (e) { /* suggestions are a nicety; typing still works */ }
+    return out.slice(0, 8);
+  }
+
+  function setupSuggest(field) {
+    const input = $(field), list = $(field + "Sugg");
+    let timer = null, items = [], active = -1, seq = 0;
+    const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+    const render = () => {
+      list.innerHTML = "";
+      items.forEach((it, i) => {
+        const li = document.createElement("li");
+        li.setAttribute("role", "option"); li.id = field + "-opt-" + i;
+        if (i === active) li.className = "on";
+        li.innerHTML = "<b></b><span></span>";
+        li.firstChild.textContent = it.label; li.lastChild.textContent = it.sub || "";
+        li.addEventListener("mousedown", e => { e.preventDefault(); choose(i); });
+        list.append(li);
+      });
+      list.hidden = !items.length;
+      input.setAttribute("aria-expanded", String(!!items.length));
+      input.setAttribute("aria-activedescendant", active >= 0 ? field + "-opt-" + active : "");
+    };
+    async function choose(i) {
+      const it = items[i]; if (!it) return;
+      close();
+      input.value = it.text;
+      if (it.postcode) {
+        try {
+          const r = await fetch("https://api.postcodes.io/postcodes/" + encodeURIComponent(it.postcode));
+          const j = (await r.json()).result;
+          setPicked(field, it.text, { lat: j.latitude, lng: j.longitude, label: [j.postcode, j.admin_ward, j.admin_district].filter(Boolean).join(", ") });
+        } catch (e) { setPicked(field, null); }
+      } else setPicked(field, it.text, { lat: it.lat, lng: it.lng, label: it.label });
+    }
+    input.addEventListener("input", () => {
+      setPicked(field, null);
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) { close(); return; }
+      const mine = ++seq;
+      timer = setTimeout(async () => {
+        const res = await suggestions(q);
+        if (mine !== seq) return; // a newer keystroke won
+        items = res; active = -1; render();
+      }, 350);
+    });
+    input.addEventListener("keydown", e => {
+      if (list.hidden) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); render(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, 0); render(); }
+      else if (e.key === "Enter" && active >= 0) { e.preventDefault(); choose(active); }
+      else if (e.key === "Escape") close();
+    });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+  }
+  setupSuggest("from"); setupSuggest("to");
+
   // ---- Saved places ----
   function renderPlaces() {
     const list = store.get("places", []);
-    $("placeList").innerHTML = "";
     $("places").innerHTML = "";
     list.forEach((p, i) => {
-      const o = document.createElement("option"); o.value = p.name; $("placeList").append(o);
       const chip = document.createElement("span"); chip.className = "chip";
       const b = document.createElement("button"); b.type = "button"; b.textContent = p.name;
       b.title = "Go to " + p.name;
-      b.onclick = () => { $("to").value = p.name; };
+      b.onclick = () => { $("to").value = p.name; setPicked("to", p.name, { lat: p.lat, lng: p.lng, label: p.name }); };
       const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = "✕";
       x.setAttribute("aria-label", "Remove " + p.name);
       x.onclick = () => { const l = store.get("places", []); l.splice(i, 1); store.set("places", l); renderPlaces(); };
@@ -224,7 +332,12 @@
     $("to").value = name; status("Saved “" + name + "”.");
   });
   $("placeName").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("placeOk").click(); } });
-  $("swapBtn").addEventListener("click", () => { const f = $("from").value; $("from").value = $("to").value; $("to").value = f; });
+  $("swapBtn").addEventListener("click", () => {
+    const f = $("from").value, pf = picked.from;
+    $("from").value = $("to").value; $("to").value = f;
+    picked.from = picked.to; picked.to = pf;
+    showMatched("from"); showMatched("to");
+  });
   renderPlaces();
 
   // ---- Saved journeys ----

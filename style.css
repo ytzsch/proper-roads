@@ -23,7 +23,7 @@ main{flex:1;display:grid;grid-template-columns:minmax(300px,400px) 1fr;min-heigh
   .map-wrap{height:60vh;flex:none}
 }
 .panel{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;border-right:1px solid var(--line)}
-.field{display:grid;gap:6px;margin-bottom:12px}
+.field{display:grid;gap:6px;margin-bottom:12px;position:relative}
 label{font-weight:600;font-size:14px}
 input,select{font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:2px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;min-height:44px}
 input:focus,select:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--yellow);outline-offset:1px}
@@ -78,3 +78,13 @@ dialog .actions{margin-top:16px}
 .chip button{background:none;border:0;color:var(--ink);font-weight:600;min-height:36px;padding:4px 4px 4px 12px}
 .chip button.x{color:var(--muted);padding:4px 10px 4px 6px;font-weight:400}
 .save-place{display:grid;gap:6px;margin-top:10px}
+.sugg{list-style:none;margin:0;padding:4px 0;position:absolute;left:0;right:0;top:calc(100% - 6px);z-index:1000;background:var(--surface);border:2px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:320px;overflow-y:auto}
+.sugg li{padding:9px 12px;cursor:pointer;display:grid;line-height:1.3}
+.sugg li b{font-weight:600}
+.sugg li span{font-size:13px;color:var(--muted);text-transform:capitalize}
+.sugg li.on,.sugg li:hover{background:var(--bg)}
+.matched{margin:0;font-size:13px;color:var(--green);font-weight:600}
+@media (prefers-color-scheme:dark){.matched{color:#7fd3a6}}
+.journey{margin:0 0 10px;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.end-pin{border-radius:50%;border:2px solid #fff;color:#fff;font:800 13px/22px Overpass,sans-serif;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.end-pin.start{background:var(--green)}.end-pin.finish{background:#16201b}
