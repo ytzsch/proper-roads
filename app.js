@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "22", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "23", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -173,7 +173,16 @@
   // One-off: people on the old fixed default of 3 move to Auto.
   if (!store.get("maxWpMigrated", false)) { if (+store.get("maxWp", 3) === 3) store.set("maxWp", "auto"); store.set("maxWpMigrated", true); }
 
+  // Long trips are opened in Google Maps as parts, each with its own 9 waypoints,
+  // so pins stay close enough together (about every 6-7 miles) to hold Google to the route.
+  function legsFor(path) {
+    const miles = path.distance / 1609.344;
+    return miles > 70 ? Math.min(3, Math.ceil(miles / 60)) : 1;
+  }
+
   function pinBudget(path, hasStop) {
+    const legs = legsFor(path);
+    if (legs > 1) return legs * 10 - 1 - (hasStop ? 1 : 0);
     const v = String(store.get("maxWp", "auto"));
     const miles = path.distance / 1609.344;
     let n = v === "auto" ? Math.min(9, Math.max(3, Math.round(miles / 10))) : +v || 3;
@@ -221,6 +230,18 @@
     });
   }
 
+  // Split pins into Google Maps parts: each part ends at a pin, the next part starts there.
+  function splitLegs(wps, from, to, legs) {
+    if (legs < 2 || wps.length < legs) return [{ from, to, wps }];
+    const n = wps.length, cuts = [];
+    for (let L = 1; L < legs; L++) cuts.push(Math.round((n + 1) * L / legs) - 1);
+    const parts = [];
+    let start = from, prev = -1;
+    cuts.forEach(c => { parts.push({ from: start, to: wps[c], wps: wps.slice(prev + 1, c) }); start = wps[c]; prev = c; });
+    parts.push({ from: start, to, wps: wps.slice(prev + 1) });
+    return parts;
+  }
+
   function show(std, pr, wps, from, to) {
     const s = PR.laneStats(std), p = PR.laneStats(pr);
     $("stdTime").textContent = PR.fmtTime(std.time);
@@ -236,11 +257,31 @@
     $("verdict").textContent = saved < 400
       ? "Little difference from the usual route here, but Google may still pick lanes, so the route is pinned anyway."
       : "Skips " + PR.fmtMiles(saved) + " of lanes for " + (extra > 0 ? PR.fmtMiles(extra) + " extra." : "no extra distance.");
-    $("gmaps").href = PR.googleMapsUrl(from, to, wps);
+    const legs = splitLegs(wps, from, to, legsFor(pr));
+    $("gmaps").href = PR.googleMapsUrl(from, to, wps.slice(0, 9));
+    $("gmaps").hidden = legs.length > 1;
+    $("legs").innerHTML = "";
+    $("legs").hidden = legs.length < 2;
+    if (legs.length > 1) {
+      let startMi = 0;
+      legs.forEach((leg, k) => {
+        const endMi = k === legs.length - 1 ? pr.distance / 1609.344 : leg.to.at / 1609.344;
+        const a = document.createElement("a");
+        a.className = "primary go"; a.target = "_blank"; a.rel = "noopener";
+        a.href = PR.googleMapsUrl(leg.from, leg.to, leg.wps);
+        a.innerHTML = "Part " + (k + 1) + " of " + legs.length + " in Google Maps <small></small>";
+        a.querySelector("small").textContent = "miles " + Math.round(startMi) + " to " + Math.round(endMi);
+        $("legs").append(a);
+        startMi = endMi;
+      });
+    }
     $("wpHint").textContent = !wps.length
       ? "Short trip, so it opens Google Maps with no waypoints."
       : (() => {
           const pins = wps.filter(w => !w.stop).length, stop = wps.some(w => w.stop);
+          const parts = legsFor(pr);
+          if (parts > 1) return "Long trip, so it opens in " + parts + " parts with " + pins + " pins in total" + (stop ? " plus your stop" : "") +
+            ". When Google says you've arrived at the end of a part, come back and open the next.";
           return "Opens Google Maps with " + (stop ? "your stop and " : "") + pins + " pin" + (pins === 1 ? "" : "s") +
             " on main roads to hold it to this route. Tap through them as stops.";
         })();

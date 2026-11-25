@@ -117,3 +117,6 @@ dialog .actions{margin-top:16px}
 .list .row span{flex:1;font-size:14px}
 .list .del{background:none;border:0;color:var(--muted);min-width:44px}
 button.small{min-height:36px;padding:4px 12px;font-size:14px}
+.legs{display:grid;gap:8px}
+.legs .go{flex-direction:column;line-height:1.2;padding:10px}
+.legs .go small{font-weight:400;font-size:13px;opacity:.9}

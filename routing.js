@@ -205,68 +205,27 @@
       s.du = o.urgent ? Math.max(...ds.slice(0, o.urgent)) : 0; // distance from the shortcut route(s)
     });
 
-    const runs = [];
-    let cur = null;
-    prS.forEach((s, i) => {
-      const edge = s.at < 300 || total - s.at < 300 || nearAvoid(s.at); // never pin right by the ends or a stop
-      if (s.d > o.threshold && !edge) { (cur = cur || []).push(s); }
-      else if (cur) { runs.push(cur); cur = null; }
-      if (i === prS.length - 1 && cur) runs.push(cur);
-    });
-
-    // Long detours get split so each ~8 km stretch can have its own pin.
-    const chunks = [];
-    runs.forEach(run => {
-      const len = run[run.length - 1].at - run[0].at;
-      const n = Math.max(1, Math.ceil(len / 8000)), size = Math.ceil(run.length / n);
-      for (let i = 0; i < run.length; i += size) chunks.push(run.slice(i, i + size));
-    });
-
-    const picks = chunks.map(run => {
-      const peak = run.reduce((a, b) => (b.d > a.d ? b : a));
-      const mid = (run[0].at + run[run.length - 1].at) / 2;
-      const centre = run.reduce((a, b) => (Math.abs(b.at - mid) < Math.abs(a.at - mid) ? b : a));
-      // best-ranked major road near the middle of this stretch
-      // best-ranked, junction-free spot on a main road near the middle of this stretch
+    // Even coverage: split the route into `max` equal sections and put one pin in each.
+    // Within a section, prefer (in order): a spot alongside a tempting shortcut, a spot where
+    // the other routes differ, then a clean main-road spot near the section's middle.
+    // Always keep clear of junctions/bends/slip roads where possible.
+    const chosen = [];
+    const usable = s => s.at >= 500 && total - s.at >= 500 && !nearAvoid(s.at);
+    const seg = total / max;
+    if (total > 3000) for (let k = 0; k < max; k++) {
+      const lo = k * seg, hi = (k + 1) * seg, mid = (lo + hi) / 2;
       let best = null, bestScore = -Infinity;
-      for (const s of run) {
-        const rank = MAJOR_RANK[s.c] || 0;
-        const score = (s.bad ? -5000 : 0) + rank * 1000 - Math.abs(s.at - mid) / 10;
-        if (score > bestScore) { bestScore = score; best = s; }
+      for (const s of prS) {
+        if (s.at < lo || s.at >= hi || !usable(s)) continue;
+        let sc = 0;
+        if (s.du > o.threshold) sc += 1e6 + s.du * 10;        // dodging a shortcut: most important
+        else if (s.d > o.threshold) sc += 1e4 + s.d;           // routes differ here
+        sc += (MAJOR_RANK[s.c] || 0) * 200;                    // A/B roads
+        sc -= Math.abs(s.at - mid) / 50;                       // gentle pull to the middle
+        if (s.bad) sc -= 5e5;                                  // junction/bend/slip: avoid, but guarding a shortcut matters more
+        if (sc > bestScore) { bestScore = sc; best = s; }
       }
-      // Shortcut-tempting stretches outrank everything else, however short they are.
-      const urgentPeak = Math.max(...run.map(x => x.du));
-      const urgent = urgentPeak > o.threshold;
-      if (urgent) {
-        // Pin where ours is furthest from the shortcut (but on a clean spot), so Google can't reach it via the lane.
-        let ub = null, us = -Infinity;
-        for (const s of run) {
-          const sc = (s.bad ? -1e6 : 0) + s.du * 10 + (MAJOR_RANK[s.c] || 0) * 200;
-          if (sc > us) { us = sc; ub = s; }
-        }
-        return { point: ub || best || centre, score: 1e12 + urgentPeak * run.length };
-      }
-      return { point: best || centre, score: peak.d * run.length };
-    });
-
-    let chosen = picks.sort((a, b) => b.score - a.score).slice(0, max).map(x => x.point);
-
-    // Google's own route isn't our "usual" one, so always pin the chosen route:
-    // fill any spare slots with evenly spaced points on main roads, away from existing pins.
-    const spare = max - chosen.length;
-    if (spare > 0 && total > 3000) {
-      const n = Math.min(spare, Math.max(1, Math.floor(total / 8000)));
-      for (let k = 1; k <= n; k++) {
-        const target = total * k / (n + 1);
-        let best = null, bestScore = -Infinity;
-        for (const s of prS) {
-          if (s.at < 500 || total - s.at < 500 || nearAvoid(s.at)) continue;
-          if (chosen.some(c => Math.abs(c.at - s.at) < Math.min(4000, total / (max * 2)))) continue;
-          const score = (s.bad ? -5000 : 0) + (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
-          if (score > bestScore) { bestScore = score; best = s; }
-        }
-        if (best) chosen.push(best);
-      }
+      if (best) chosen.push(best);
     }
     return chosen.sort((a, b) => a.at - b.at)
       .map(s => ({ lat: s.p[1], lng: s.p[0], roadClass: s.c, at: s.at }));
