@@ -1,6 +1,8 @@
 {
   const PR = window.ProperRoads;
-  const $ = id => document.getElementById(id);
+  // If the page and this script come from different versions (cached page), missing
+  // elements get a detached stand-in instead of crashing the app.
+  const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
