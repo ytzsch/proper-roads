@@ -44,6 +44,12 @@
         <div class="ticks" aria-hidden="true"><span>Relaxed</span><span>Balanced</span><span>Strict</span></div>
         <p class="hint" id="tolHint"></p>
       </div>
+      <div class="field">
+        <label for="priority">Route priority</label>
+        <input type="range" id="priority" min="0" max="2" step="1" value="0" aria-describedby="priHint">
+        <div class="ticks" aria-hidden="true"><span>Quickest</span><span>Balanced</span><span>Shortest</span></div>
+        <p class="hint" id="priHint"></p>
+      </div>
       <div class="actions">
         <button class="primary" type="submit" id="goBtn">Find proper route</button>
         <button class="ghost" type="button" id="saveBtn" hidden>Save journey</button>

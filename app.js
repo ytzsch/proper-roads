@@ -66,11 +66,11 @@
     try { const j = await r.json(); return j.message || fallback; } catch (e) { return fallback; }
   }
 
-  async function route(from, to, level, key) {
+  async function route(from, to, level, key, priority) {
     const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
     let r;
     try {
-      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(PR.routeBody(from, to, level)) });
+      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(PR.routeBody(from, to, level, priority)) });
     } catch (e) {
       throw new Error(usingOwn() ? "Can't reach your routing server. Is Tailscale on, and has the server finished building?" : "Couldn't reach GraphHopper. Check your connection.");
     }
@@ -82,19 +82,23 @@
 
   // ---- Planning ----
   function showTolHint() { $("tolHint").textContent = PR.TOLERANCE[+$("tolerance").value].hint; }
-  $("tolerance").addEventListener("input", showTolHint);
-  showTolHint();
+  function showPriHint() { $("priHint").textContent = PR.PRIORITY[+$("priority").value].hint; }
+  $("tolerance").value = store.get("tolerance", 1);
+  $("priority").value = store.get("priority", 0);
+  $("tolerance").addEventListener("input", () => { showTolHint(); store.set("tolerance", +$("tolerance").value); });
+  $("priority").addEventListener("input", () => { showPriHint(); store.set("priority", +$("priority").value); });
+  showTolHint(); showPriHint();
 
   async function plan(fromText, toText) {
     const key = store.get("key", "");
     if (!key && !usingOwn()) { status("Add your routing server (or a GraphHopper key) in Settings first.", true); openSettings(); return; }
-    const level = +$("tolerance").value;
+    const level = +$("tolerance").value, priority = +$("priority").value;
     $("goBtn").disabled = true; status("Finding routes…");
     try {
       const [from, to] = await Promise.all([geocode(fromText, key), geocode(toText, key)]);
-      const [std, pr] = await Promise.all([route(from, to, null, key), route(from, to, level, key)]);
+      const [std, pr] = await Promise.all([route(from, to, null, key), route(from, to, level, key, priority)]);
       const wps = PR.pickWaypoints(pr, std, +store.get("maxWp", 3));
-      last = { fromText, toText, from, to, level };
+      last = { fromText, toText, from, to, level, priority };
       show(std, pr, wps, from, to);
       draw(std, pr, wps);
       status("");
@@ -147,7 +151,7 @@
       const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button"; b.className = "trip"; b.textContent = j.name;
-      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; $("tolerance").value = j.level; showTolHint(); plan(j.fromText, j.toText); };
+      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; $("tolerance").value = j.level; $("priority").value = j.priority || 0; showTolHint(); showPriHint(); plan(j.fromText, j.toText); };
       const d = document.createElement("button");
       d.type = "button"; d.className = "del"; d.textContent = "✕"; d.setAttribute("aria-label", "Remove " + j.name);
       d.onclick = () => { const l = store.get("saved", []); l.splice(i, 1); store.set("saved", l); renderSaved(); };
@@ -158,7 +162,7 @@
     if (!last) return;
     const list = store.get("saved", []);
     const name = (last.from.label || last.fromText) + " → " + (last.to.label || last.toText);
-    if (!list.some(j => j.fromText === last.fromText && j.toText === last.toText)) list.unshift({ name, fromText: last.fromText, toText: last.toText, level: last.level });
+    if (!list.some(j => j.fromText === last.fromText && j.toText === last.toText)) list.unshift({ name, fromText: last.fromText, toText: last.toText, level: last.level, priority: last.priority });
     store.set("saved", list.slice(0, 20)); renderSaved(); status("Saved.");
   });
   renderSaved();

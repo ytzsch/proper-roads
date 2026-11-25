@@ -15,9 +15,18 @@
       laneKmh: 32, unclassified: 0.05, minorOther: 0.02, tertiary: 0.6, narrow: 0.02 }
   ];
 
-  function customModel(level) {
+  // Route priority: how much each extra km costs (seconds per km).
+  // Quickest leaves GraphHopper's default; higher values favour shorter routes.
+  const PRIORITY = [
+    { name: "Quickest", hint: "The fastest journey on proper roads.", distance: null },
+    { name: "Balanced", hint: "Cuts out long detours that only save a minute or two.", distance: 150 },
+    { name: "Shortest", hint: "The most direct route on proper roads, even if it's a bit slower.", distance: 400 }
+  ];
+
+  function customModel(level, priority) {
     const t = TOLERANCE[level] || TOLERANCE[1];
-    return {
+    const d = (PRIORITY[priority] || PRIORITY[0]).distance;
+    const m = {
       speed: [
         { if: "road_class == UNCLASSIFIED || road_class == TRACK || road_class == SERVICE", limit_to: t.laneKmh },
         { if: "road_class == TERTIARY", limit_to: t.laneKmh + 24 }
@@ -29,9 +38,11 @@
         { if: "max_width < 3.5", multiply_by: t.narrow }
       ]
     };
+    if (d != null) m.distance_influence = d;
+    return m;
   }
 
-  function routeBody(from, to, level) {
+  function routeBody(from, to, level, priority) {
     const body = {
       profile: "car",
       points: [[from.lng, from.lat], [to.lng, to.lat]],
@@ -40,7 +51,7 @@
       locale: "en",
       details: ["road_class"]
     };
-    if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level); }
+    if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority); }
     return body;
   }
 
@@ -168,6 +179,6 @@
   }
   const fmtMiles = metres => (metres / 1609.344).toFixed(1) + " miles";
 
-  const api = { TOLERANCE, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
+  const api = { TOLERANCE, PRIORITY, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
   if (typeof module !== "undefined") module.exports = api; else root.ProperRoads = api;
 })(this);
