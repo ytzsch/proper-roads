@@ -26,12 +26,24 @@ The lane tolerance slider (Relaxed, Balanced, Strict) changes how hard lanes are
 
 ## Setup
 
-1. **Get a GraphHopper key.** Sign up for the free plan at graphhopper.com, then create a key under API Keys.
-2. **Create the repo.** Make a new repo `proper-roads` on GitHub and upload these files to the root.
-3. **Turn on Pages.** In the repo, go to Settings → Pages → Deploy from a branch → `main` / root. The app will be at https://ytzsch.github.io/proper-roads/
-4. **On your phone**, open that link, tap the gear, paste your key, then add it to your home screen.
+The app is on GitHub Pages. Routing runs on your own GraphHopper server, because GraphHopper.com's free plan doesn't allow custom models.
 
-The key is stored only in your browser, not in the repo.
+### Routing server (Proxmox)
+
+In the Proxmox web UI, select the node, open **Shell** and paste:
+
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ytzsch/proper-roads/main/server/install.sh)"
+```
+
+This creates a Debian 12 container called `graphhopper` (4 cores, 9 GB RAM, 32 GB disk, starts on boot). Inside the container it installs Java 17, GraphHopper 10.2 and the Great Britain map. It also sets up a service and a monthly map refresh, then joins Tailscale with Tailscale Serve so the server gets a private HTTPS address.
+
+- The first start builds the routing graph, which takes about 30 to 60 minutes. To watch it, run `pct enter <id>` and then `journalctl -u graphhopper -f`.
+- If Tailscale asks you to enable HTTPS certificates, follow its link.
+
+### App
+
+Open https://ytzsch.github.io/proper-roads/ on your phone (with Tailscale on), tap the gear, paste the `https://graphhopper.<tailnet>.ts.net` address and save.
 
 ## Known limits (v1)
 

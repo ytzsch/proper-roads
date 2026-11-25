@@ -1,0 +1,47 @@
+# GraphHopper 10.x config for Proper Roads (Great Britain, cars only)
+graphhopper:
+  datareader.file: /srv/gh/great-britain-latest.osm.pbf
+  graph.location: /srv/gh/graph-cache
+
+  # What the app's custom models and road-class details need.
+  graph.encoded_values: car_access, car_average_speed, road_access, road_class, road_class_link, road_environment, max_width, max_speed, surface
+
+  profiles:
+    - name: car
+      custom_model_files: [car.json]
+
+  # CH: fast plain routes. LM: fast routes with the app's per-request custom models.
+  profiles_ch:
+    - profile: car
+  profiles_lm:
+    - profile: car
+  prepare.lm.landmarks: 16
+
+  prepare.min_network_size: 200
+  prepare.subnetworks.threads: 1
+  routing.non_ch.max_waypoint_distance: 1500000
+  routing.max_visited_nodes: 3000000
+
+  # Car routing only: skip paths to save memory.
+  import.osm.ignored_highways: footway,cycleway,path,pedestrian,steps,bridleway,corridor
+
+  graph.dataaccess.default_type: RAM_STORE
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: localhost
+      max_request_header_size: 50k
+  request_log:
+    appenders: []
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: localhost
+
+logging:
+  appenders:
+    - type: console
+      time_zone: Europe/London
+      log_format: "%d{HH:mm:ss} %-5p %c{1} - %m%n"

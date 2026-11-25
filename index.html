@@ -86,9 +86,12 @@
 <dialog id="settings">
   <form method="dialog" id="settingsForm">
     <h2>Settings</h2>
-    <label for="apiKey">GraphHopper API key</label>
+    <label for="server">Routing server</label>
+    <input id="server" type="url" placeholder="https://graphhopper.your-tailnet.ts.net" spellcheck="false" autocapitalize="off">
+    <p class="hint">Your own GraphHopper server. Needs Tailscale on this phone. Leave blank to use graphhopper.com with a paid key.</p>
+    <label for="apiKey">GraphHopper.com API key (only without your own server)</label>
     <input id="apiKey" placeholder="Paste your key" spellcheck="false">
-    <p class="hint">Free key from graphhopper.com (sign up, then API Keys). It's stored only in this browser.</p>
+    <p class="hint">Stored only in this browser.</p>
     <label for="maxWp">Waypoints sent to Google Maps</label>
     <select id="maxWp"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>
     <p class="hint">Google Maps on a phone handles about 3 well. Each one shows as a stop you drive through.</p>

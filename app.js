@@ -35,6 +35,9 @@
   const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
   const LATLNG = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
 
+  const server = () => store.get("server", "").replace(/\/+$/, "");
+  const usingOwn = () => !!server();
+
   async function geocode(text, key) {
     const q = text.trim();
     if (/^(here|my location)$/i.test(q) && here) return here;
@@ -43,6 +46,12 @@
     if (POSTCODE.test(q)) {
       const r = await fetch("https://api.postcodes.io/postcodes/" + encodeURIComponent(q));
       if (r.ok) { const j = await r.json(); return { lat: j.result.latitude, lng: j.result.longitude, label: j.result.postcode }; }
+    }
+    if (usingOwn()) {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", limit: "1", countrycodes: "gb" }));
+      const hit = r.ok ? (await r.json())[0] : null;
+      if (!hit) throw new Error("Couldn't find “" + q + "”. Try a postcode.");
+      return { lat: +hit.lat, lng: +hit.lon, label: hit.name || hit.display_name.split(",")[0] };
     }
     const r = await fetch(GH + "/geocode?" + new URLSearchParams({ q, locale: "en", limit: "1", key }));
     if (!r.ok) throw new Error(await ghError(r, "Couldn't look up “" + q + "”."));
@@ -58,10 +67,13 @@
   }
 
   async function route(from, to, level, key) {
-    const r = await fetch(GH + "/route?key=" + encodeURIComponent(key), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(PR.routeBody(from, to, level))
-    });
+    const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
+    let r;
+    try {
+      r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(PR.routeBody(from, to, level)) });
+    } catch (e) {
+      throw new Error(usingOwn() ? "Can't reach your routing server. Is Tailscale on, and has the server finished building?" : "Couldn't reach GraphHopper. Check your connection.");
+    }
     if (!r.ok) throw new Error(await ghError(r, "Routing failed."));
     const path = (await r.json()).paths?.[0];
     if (!path) throw new Error("No route found between those places.");
@@ -75,7 +87,7 @@
 
   async function plan(fromText, toText) {
     const key = store.get("key", "");
-    if (!key) { status("Add your free GraphHopper key in Settings first.", true); openSettings(); return; }
+    if (!key && !usingOwn()) { status("Add your routing server (or a GraphHopper key) in Settings first.", true); openSettings(); return; }
     const level = +$("tolerance").value;
     $("goBtn").disabled = true; status("Finding routes…");
     try {
@@ -154,6 +166,7 @@
   // ---- Settings ----
   function openSettings() {
     $("apiKey").value = store.get("key", "");
+    $("server").value = store.get("server", "");
     $("maxWp").value = String(store.get("maxWp", 3));
     $("settings").showModal();
   }
@@ -161,10 +174,11 @@
   $("settings").addEventListener("close", () => {
     if ($("settings").returnValue !== "save") return;
     store.set("key", $("apiKey").value.trim());
+    store.set("server", $("server").value.trim());
     store.set("maxWp", +$("maxWp").value);
     status("Settings saved.");
   });
-  if (!store.get("key", "")) status("Start by adding your free GraphHopper key in Settings.");
+  if (!store.get("key", "") && !store.get("server", "")) status("Start by adding your routing server in Settings.");
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
