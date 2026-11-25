@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#00703c">
-<meta name="app-version" content="10">
+<meta name="app-version" content="11">
 <title>Proper Roads</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <header class="sign">
@@ -46,6 +46,17 @@
         <ul class="sugg" id="toSugg" role="listbox" hidden></ul>
         <p class="matched" id="toMatched" hidden></p>
         <div class="chips" id="places" aria-label="Saved places"></div>
+        <button type="button" class="linkish" id="addStopBtn">+ Add a stop (charger, café…)</button>
+      </div>
+      <div class="field" id="viaField" hidden>
+        <label for="via">Stop on the way</label>
+        <div class="with-btn">
+          <input id="via" placeholder="Charger, postcode or place" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="viaSugg">
+          <button type="button" class="ghost" id="removeStopBtn" aria-label="Remove stop">✕</button>
+        </div>
+        <ul class="sugg" id="viaSugg" role="listbox" hidden></ul>
+        <p class="matched" id="viaMatched" hidden></p>
+        <p class="hint" id="viaHint" hidden>For battery preheating, also set this charger as the destination in the car's own Google Maps.</p>
       </div>
       <div class="field">
         <span class="label" id="tolLabel">Lane tolerance</span>
@@ -96,6 +107,11 @@
         </div>
       </div>
       <p class="verdict" id="verdict"></p>
+      <div class="chargers">
+        <button type="button" class="ghost" id="chargersBtn">Show chargers on this route</button>
+        <label class="check" id="rapidWrap" hidden><input type="checkbox" id="rapidOnly" checked> Rapid only (50 kW+)</label>
+      </div>
+      <p class="hint" id="chargerStatus"></p>
       <a class="primary go" id="gmaps" href="#" target="_blank" rel="noopener">Open in Google Maps</a>
       <p class="hint" id="wpHint"></p>
     </div>
@@ -110,7 +126,7 @@
 
   <section class="map-wrap" aria-label="Map">
     <div id="map"></div>
-    <div class="legend"><span class="k std"></span>Usual <span class="k pr"></span>Proper roads <span class="k wp"></span>Waypoint</div>
+    <div class="legend"><span class="k std"></span>Usual <span class="k pr"></span>Proper roads <span class="k wp"></span>Pin <span class="k ch"></span>Charger</div>
   </section>
 </main>
 
@@ -123,6 +139,9 @@
     <label for="apiKey">GraphHopper.com API key (only without your own server)</label>
     <input id="apiKey" placeholder="Paste your key" spellcheck="false">
     <p class="hint">Stored only in this browser.</p>
+    <label for="ocmKey">Open Charge Map API key (optional)</label>
+    <input id="ocmKey" placeholder="For better charger details" spellcheck="false">
+    <p class="hint">Free from openchargemap.org (sign up, then My Apps). Without it, chargers come from OpenStreetMap, which has less detail on power.</p>
     <label for="maxWp">Waypoints sent to Google Maps</label>
     <select id="maxWp"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>
     <p class="hint">Google Maps on a phone handles about 3 well. Each one shows as a stop you drive through.</p>
@@ -131,7 +150,7 @@
 </dialog>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="routing.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="routing.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

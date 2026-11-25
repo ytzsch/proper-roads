@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "10", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "11", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -37,15 +37,21 @@
     });
     const prLine = L.polyline(toLL(options[sel]), { color: css("--pr"), weight: 7, opacity: .95 }).addTo(layer);
     bounds.extend(prLine.getBounds());
-    wps.forEach((w, i) => L.marker([w.lat, w.lng], {
-      icon: L.divIcon({ className: "wp-icon", html: String(i + 1), iconSize: [20, 20] }),
-      title: "Waypoint " + (i + 1) + " (" + w.roadClass + " road)"
-    }).addTo(layer));
+    let n = 0;
+    wps.forEach(w => {
+      if (w.stop) return;
+      n++;
+      L.marker([w.lat, w.lng], {
+        icon: L.divIcon({ className: "wp-icon", html: String(n), iconSize: [20, 20] }),
+        title: "Pin " + n + " (" + w.roadClass + " road)"
+      }).addTo(layer);
+    });
     const pin = (pt, cls, txt, title) => L.marker([pt.lat, pt.lng], {
       icon: L.divIcon({ className: "end-pin " + cls, html: txt, iconSize: [26, 26] }), title, zIndexOffset: 1000
     }).addTo(layer);
     pin(current.from, "start", "S", "Start: " + current.from.label);
     pin(current.to, "finish", "F", "Finish: " + current.to.label);
+    if (current.via) pin(current.via, "stop", "⚡", "Stop: " + current.via.label);
     map.fitBounds(bounds, { padding: [30, 30] });
   }
 
@@ -89,10 +95,10 @@
   }
 
   // Returns all paths the server gives back. alt=true asks for up to 3 alternatives.
-  async function route(from, to, level, key, priority, alt) {
+  async function route(from, to, level, key, priority, alt, via) {
     const url = usingOwn() ? server() + "/route" : GH + "/route?key=" + encodeURIComponent(key);
-    const body = PR.routeBody(from, to, level, priority);
-    if (alt) Object.assign(body, PR.ALTERNATIVES);
+    const body = PR.routeBody(from, to, level, priority, via);
+    if (alt && !via) Object.assign(body, PR.ALTERNATIVES); // alternatives only work for A→B
     let r;
     try {
       r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -100,7 +106,7 @@
       throw new Error(usingOwn() ? "Can't reach your routing server. Is Tailscale on, and has the server finished building?" : "Couldn't reach GraphHopper. Check your connection.");
     }
     if (!r.ok) {
-      if (alt) return route(from, to, level, key, priority, false); // fall back to a single route
+      if (alt && !via) return route(from, to, level, key, priority, false, via); // fall back to a single route
       throw new Error(await ghError(r, "Routing failed."));
     }
     const paths = (await r.json()).paths || [];
@@ -134,12 +140,15 @@
     const level = +$("tolerance").value, priority = +$("priority").value;
     $("goBtn").disabled = true; status("Finding routes…");
     try {
-      const [from, to] = await Promise.all([geocode(fromText, key, "from"), geocode(toText, key, "to")]);
+      const viaText = !$("viaField").hidden ? $("via").value.trim() : "";
+      const [from, to, via] = await Promise.all([geocode(fromText, key, "from"), geocode(toText, key, "to"), viaText ? geocode(viaText, key, "via") : null]);
       setPicked("from", fromText.trim(), from); setPicked("to", toText.trim(), to);
-      $("journey").textContent = from.label + "  →  " + to.label;
-      const [stdPaths, options] = await Promise.all([route(from, to, null, key), route(from, to, level, key, priority, true)]);
-      last = { fromText, toText, from, to, level, priority };
-      current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to };
+      if (via) setPicked("via", viaText, via);
+      $("journey").textContent = from.label + "  →  " + (via ? via.label + "  →  " : "") + to.label;
+      const [stdPaths, options] = await Promise.all([route(from, to, null, key, 0, false, via), route(from, to, level, key, priority, true, via)]);
+      last = { fromText, toText, viaText, from, to, via, level, priority };
+      current = { std: stdPaths[0], options: PR.rankOptions(options, priority), from, to, via };
+      clearChargers();
       select(0);
       status("");
       $("saveBtn").hidden = false;
@@ -154,10 +163,17 @@
 
   function select(i) {
     if (!current) return;
+    if (current.sel !== undefined && current.sel !== i) clearChargers();
     current.sel = i;
     const pr = current.options[i];
     const others = [current.std].concat(current.options.filter((_, j) => j !== i));
-    const wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3));
+    let wps;
+    if (current.via) {
+      const viaAt = PR.alongRoute(pr, current.via);
+      wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3), { avoidAt: [viaAt] })
+        .concat([{ lat: current.via.lat, lng: current.via.lng, roadClass: "stop", at: viaAt, stop: true }])
+        .sort((a, b) => a.at - b.at);
+    } else wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3));
     show(current.std, pr, wps, current.from, current.to);
     draw(current.std, current.options, i, wps);
     renderOptions();
@@ -198,8 +214,11 @@
     $("gmaps").href = PR.googleMapsUrl(from, to, wps);
     $("wpHint").textContent = !wps.length
       ? "Short trip, so it opens Google Maps with no waypoints."
-      : "Opens Google Maps with " + wps.length + " waypoint" + (wps.length > 1 ? "s" : "") +
-        " on main roads to hold it to this route. Tap through them as stops. Google should show one route, not several.";
+      : (() => {
+          const pins = wps.filter(w => !w.stop).length, stop = wps.some(w => w.stop);
+          return "Opens Google Maps with " + (stop ? "your stop and " : "") + pins + " pin" + (pins === 1 ? "" : "s") +
+            " on main roads to hold it to this route. Tap through them as stops.";
+        })();
     $("results").hidden = false;
   }
 
@@ -316,6 +335,110 @@
   }
   setupSuggest("from"); setupSuggest("to");
 
+  // ---- Stop on the way ----
+  function showStop(on) {
+    $("viaField").hidden = !on; $("addStopBtn").hidden = on;
+    if (!on) { $("via").value = ""; setPicked("via", null); $("viaHint").hidden = true; }
+  }
+  $("addStopBtn").addEventListener("click", () => { showStop(true); $("via").focus(); });
+  $("removeStopBtn").addEventListener("click", () => showStop(false));
+  setupSuggest("via");
+
+  function useAsStop(c) {
+    showStop(true);
+    $("via").value = c.name;
+    setPicked("via", c.name, { lat: c.lat, lng: c.lng, label: c.name + (c.kw ? " (" + c.kw + " kW)" : "") });
+    $("viaHint").hidden = false;
+    map.closePopup();
+    plan($("from").value, $("to").value);
+  }
+
+  // ---- Chargers on the route ----
+  const chargerLayer = L.layerGroup().addTo(map);
+  let chargers = null; // fetched list for the current route
+  function clearChargers() {
+    chargerLayer.clearLayers(); chargers = null;
+    $("chargersBtn").textContent = "Show chargers on this route";
+    $("rapidWrap").hidden = true; $("chargerStatus").textContent = "";
+  }
+
+  function routeBounds(path) {
+    let s = 90, w = 180, n = -90, e = -180;
+    for (const [x, y] of path.points.coordinates) { s = Math.min(s, y); n = Math.max(n, y); w = Math.min(w, x); e = Math.max(e, x); }
+    const pad = 0.02;
+    return { s: s - pad, w: w - pad, n: n + pad, e: e + pad };
+  }
+
+  async function fetchChargers(b) {
+    const key = store.get("ocmKey", "");
+    if (key) {
+      const r = await fetch("https://api.openchargemap.io/v3/poi/?" + new URLSearchParams({
+        output: "json", countrycode: "GB", maxresults: "800", compact: "true", verbose: "false", key,
+        boundingbox: "(" + b.n + "," + b.w + "),(" + b.s + "," + b.e + ")"
+      }));
+      if (!r.ok) throw new Error("Open Charge Map refused the request. Check the key in Settings.");
+      return (await r.json()).map(p => ({
+        name: p.AddressInfo?.Title || "Charger", lat: p.AddressInfo?.Latitude, lng: p.AddressInfo?.Longitude,
+        kw: Math.round(Math.max(0, ...(p.Connections || []).map(c => c.PowerKW || 0))) || null,
+        points: (p.Connections || []).reduce((a, c) => a + (c.Quantity || 1), 0) || null,
+        operator: p.OperatorsReference || null, source: "Open Charge Map"
+      })).filter(c => c.lat && c.lng);
+    }
+    const q = "[out:json][timeout:25];(node[\"amenity\"=\"charging_station\"](" + b.s + "," + b.w + "," + b.n + "," + b.e + ");" +
+      "way[\"amenity\"=\"charging_station\"](" + b.s + "," + b.w + "," + b.n + "," + b.e + "););out center tags;";
+    const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: new URLSearchParams({ data: q }) });
+    if (!r.ok) throw new Error("Couldn't load chargers just now. Try again in a minute.");
+    return (await r.json()).elements.map(el => {
+      const t = el.tags || {};
+      const kws = Object.keys(t).filter(k => /output$/.test(k)).map(k => parseFloat(t[k])).filter(x => !isNaN(x));
+      return {
+        name: t.name || t.operator || t.brand || "Charger", lat: el.lat ?? el.center?.lat, lng: el.lon ?? el.center?.lon,
+        kw: kws.length ? Math.round(Math.max(...kws)) : null, points: +t.capacity || null,
+        operator: t.operator || t.brand || t.network || null, source: "OpenStreetMap"
+      };
+    }).filter(c => c.lat && c.lng);
+  }
+
+  function renderChargers() {
+    chargerLayer.clearLayers();
+    if (!chargers) return;
+    const rapid = $("rapidOnly").checked;
+    const list = chargers.filter(c => !rapid || (c.kw && c.kw >= 50));
+    list.forEach(c => {
+      const el = document.createElement("div"); el.className = "ch-pop";
+      const h = document.createElement("b"); h.textContent = c.name; el.append(h);
+      const meta = document.createElement("div"); meta.className = "ch-meta";
+      meta.textContent = [c.kw ? c.kw + " kW max" : "Power unknown", c.points ? c.points + " connectors" : null, c.operator,
+        (c.off / 1609.344).toFixed(1) + " mi off route"].filter(Boolean).join(" · ");
+      el.append(meta);
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "primary"; btn.textContent = "Stop here";
+      btn.onclick = () => useAsStop(c); el.append(btn);
+      const note = document.createElement("div"); note.className = "ch-note"; note.textContent = "Data: " + c.source; el.append(note);
+      L.marker([c.lat, c.lng], {
+        icon: L.divIcon({ className: "ch-icon" + (c.kw >= 50 ? " rapid" : ""), html: "⚡", iconSize: [22, 22] }),
+        title: c.name
+      }).bindPopup(el).addTo(chargerLayer);
+    });
+    $("chargerStatus").textContent = list.length
+      ? list.length + " charger" + (list.length > 1 ? "s" : "") + " within a mile of the route. Tap one on the map to see details and stop there."
+      : rapid ? "No rapid chargers found near this route. Untick Rapid only to see slower ones." : "No chargers found near this route.";
+  }
+
+  $("chargersBtn").addEventListener("click", async () => {
+    if (!current) return;
+    if (chargers) { clearChargers(); return; }
+    const pr = current.options[current.sel];
+    $("chargerStatus").textContent = "Finding chargers…";
+    try {
+      const all = await fetchChargers(routeBounds(pr));
+      chargers = PR.nearRoute(pr, all, 1609);
+      $("chargersBtn").textContent = "Hide chargers";
+      $("rapidWrap").hidden = false;
+      renderChargers();
+    } catch (e) { $("chargerStatus").textContent = e.message || "Couldn't load chargers."; }
+  });
+  $("rapidOnly").addEventListener("change", renderChargers);
+
   // ---- Saved places ----
   function renderPlaces() {
     const list = store.get("places", []);
@@ -364,7 +487,8 @@
       const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button"; b.className = "trip"; b.textContent = j.name;
-      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; setSeg("tolerance", j.level); setSeg("priority", j.priority || 0); plan(j.fromText, j.toText); };
+      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; setSeg("tolerance", j.level); setSeg("priority", j.priority || 0);
+        if (j.viaText) { showStop(true); $("via").value = j.viaText; if (j.viaPlace) setPicked("via", j.viaText, j.viaPlace); } else showStop(false); plan(j.fromText, j.toText); };
       const d = document.createElement("button");
       d.type = "button"; d.className = "del"; d.textContent = "✕"; d.setAttribute("aria-label", "Remove " + j.name);
       d.onclick = () => { const l = store.get("saved", []); l.splice(i, 1); store.set("saved", l); renderSaved(); };
@@ -374,8 +498,9 @@
   $("saveBtn").addEventListener("click", () => {
     if (!last) return;
     const list = store.get("saved", []);
-    const name = (last.from.label || last.fromText) + " → " + (last.to.label || last.toText);
-    if (!list.some(j => j.fromText === last.fromText && j.toText === last.toText)) list.unshift({ name, fromText: last.fromText, toText: last.toText, level: last.level, priority: last.priority });
+    const name = (last.from.label || last.fromText) + " → " + (last.via ? (last.via.label || last.viaText) + " → " : "") + (last.to.label || last.toText);
+    if (!list.some(j => j.fromText === last.fromText && j.toText === last.toText && (j.viaText || "") === (last.viaText || ""))) list.unshift({ name, fromText: last.fromText, toText: last.toText, level: last.level, priority: last.priority, viaText: last.viaText || "",
+      viaPlace: last.via ? { lat: last.via.lat, lng: last.via.lng, label: last.via.label } : null });
     store.set("saved", list.slice(0, 20)); renderSaved(); status("Saved.");
   });
   renderSaved();
@@ -384,6 +509,7 @@
   function openSettings() {
     $("apiKey").value = store.get("key", "");
     $("server").value = store.get("server", "");
+    $("ocmKey").value = store.get("ocmKey", "");
     $("maxWp").value = String(store.get("maxWp", 3));
     $("settings").showModal();
   }
@@ -392,6 +518,7 @@
     if ($("settings").returnValue !== "save") return;
     store.set("key", $("apiKey").value.trim());
     store.set("server", $("server").value.trim());
+    store.set("ocmKey", $("ocmKey").value.trim());
     store.set("maxWp", +$("maxWp").value);
     status("Settings saved.");
   });

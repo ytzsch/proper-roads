@@ -42,10 +42,11 @@
     return m;
   }
 
-  function routeBody(from, to, level, priority) {
+  function routeBody(from, to, level, priority, via) {
+    const pts = [from].concat(via ? [via] : [], [to]);
     const body = {
       profile: "car",
-      points: [[from.lng, from.lat], [to.lng, to.lat]],
+      points: pts.map(p => [p.lng, p.lat]),
       points_encoded: false,
       instructions: false,
       locale: "en",
@@ -123,7 +124,8 @@
   // `others` is the usual route plus the other options: anywhere the chosen route
   // splits from any of them is a place Google could wander off, so pin it there.
   function pickWaypoints(prPath, others, max, opts) {
-    const o = Object.assign({ threshold: 250, step: 150 }, opts || {});
+    const o = Object.assign({ threshold: 250, step: 150, avoidAt: [] }, opts || {});
+    const nearAvoid = at => o.avoidAt.some(a => Math.abs(a - at) < 1500);
     const list = (Array.isArray(others) ? others : [others]).filter(Boolean);
     const prS = resample(prPath.points.coordinates, classPerPoint(prPath), o.step);
     const lines = list.map(p => resample(p.points.coordinates, classPerPoint(p), 50).map(s => s.p));
@@ -133,7 +135,7 @@
     const runs = [];
     let cur = null;
     prS.forEach((s, i) => {
-      const edge = s.at < 300 || total - s.at < 300; // never pin right by the ends
+      const edge = s.at < 300 || total - s.at < 300 || nearAvoid(s.at); // never pin right by the ends or a stop
       if (s.d > o.threshold && !edge) { (cur = cur || []).push(s); }
       else if (cur) { runs.push(cur); cur = null; }
       if (i === prS.length - 1 && cur) runs.push(cur);
@@ -173,7 +175,7 @@
         const target = total * k / (n + 1);
         let best = null, bestScore = -Infinity;
         for (const s of prS) {
-          if (s.at < 500 || total - s.at < 500) continue;
+          if (s.at < 500 || total - s.at < 500 || nearAvoid(s.at)) continue;
           if (chosen.some(c => Math.abs(c.at - s.at) < 1500)) continue;
           const score = (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
           if (score > bestScore) { bestScore = score; best = s; }
@@ -182,7 +184,27 @@
       }
     }
     return chosen.sort((a, b) => a.at - b.at)
-      .map(s => ({ lat: s.p[1], lng: s.p[0], roadClass: s.c }));
+      .map(s => ({ lat: s.p[1], lng: s.p[0], roadClass: s.c, at: s.at }));
+  }
+
+  // How far along a route (metres) the point nearest to `pt` is.
+  function alongRoute(path, pt) {
+    const S = resample(path.points.coordinates, classPerPoint(path), 50);
+    let best = S[0], bd = Infinity;
+    for (const s of S) { const d = dist(s.p, [pt.lng, pt.lat]); if (d < bd) { bd = d; best = s; } }
+    return best.at;
+  }
+
+  // Points (e.g. chargers) within `maxM` metres of a route, with how far along it they sit.
+  function nearRoute(path, items, maxM) {
+    const S = resample(path.points.coordinates, classPerPoint(path), 300);
+    const line = S.map(s => s.p);
+    return items.map(it => {
+      const p = [it.lng, it.lat];
+      let at = 0, bd = Infinity;
+      for (const s of S) { const d = dist(s.p, p); if (d < bd) { bd = d; at = s.at; } }
+      return Object.assign({}, it, { off: distToLine(p, line), at });
+    }).filter(it => it.off <= maxM).sort((a, b) => a.at - b.at);
   }
 
   // Ask the server for up to 3 genuinely different routes.
@@ -221,6 +243,6 @@
   }
   const fmtMiles = metres => (metres / 1609.344).toFixed(1) + " miles";
 
-  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
+  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, alongRoute, nearRoute, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
   if (typeof module !== "undefined") module.exports = api; else root.ProperRoads = api;
 })(this);
