@@ -90,3 +90,8 @@ dialog .actions{margin-top:16px}
 .end-pin.start{background:var(--green)}.end-pin.finish{background:#16201b}
 .version{margin:0;font-size:13px;color:var(--muted)}
 .version.warn{color:var(--danger);font-weight:600}
+.label{font-weight:600;font-size:14px}
+.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:2px solid var(--green);border-radius:8px;overflow:hidden}
+.seg button{background:var(--surface);color:var(--ink);border:0;border-radius:0;min-height:44px;padding:8px 4px;font-weight:600;font-size:15px}
+.seg button+button{border-left:2px solid var(--green)}
+.seg button.on{background:var(--green);color:#fff}

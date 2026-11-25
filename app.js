@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "9", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "10", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -111,11 +111,22 @@
   // ---- Planning ----
   function showTolHint() { $("tolHint").textContent = PR.TOLERANCE[+$("tolerance").value].hint; }
   function showPriHint() { $("priHint").textContent = PR.PRIORITY[+$("priority").value].hint; }
-  $("tolerance").value = store.get("tolerance", 1);
-  $("priority").value = store.get("priority", 0);
-  $("tolerance").addEventListener("input", () => { showTolHint(); store.set("tolerance", +$("tolerance").value); });
-  $("priority").addEventListener("input", () => { showPriHint(); store.set("priority", +$("priority").value); });
-  showTolHint(); showPriHint();
+  // Three-way tap buttons (no sliders: dragging near the screen edge triggers Android's back gesture).
+  function syncSeg(id) {
+    const v = $(id).value;
+    document.querySelectorAll('.seg[data-for="' + id + '"] button').forEach(b => {
+      const on = b.dataset.v === v;
+      b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on));
+    });
+    (id === "tolerance" ? showTolHint : showPriHint)();
+  }
+  function setSeg(id, v) { $(id).value = String(v); syncSeg(id); }
+  document.querySelectorAll(".seg").forEach(seg => seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    const id = seg.dataset.for; setSeg(id, b.dataset.v); store.set(id, +b.dataset.v);
+  }));
+  setSeg("tolerance", store.get("tolerance", 1));
+  setSeg("priority", store.get("priority", 0));
 
   async function plan(fromText, toText) {
     const key = store.get("key", "");
@@ -353,7 +364,7 @@
       const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button"; b.className = "trip"; b.textContent = j.name;
-      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; $("tolerance").value = j.level; $("priority").value = j.priority || 0; showTolHint(); showPriHint(); plan(j.fromText, j.toText); };
+      b.onclick = () => { $("from").value = j.fromText; $("to").value = j.toText; setSeg("tolerance", j.level); setSeg("priority", j.priority || 0); plan(j.fromText, j.toText); };
       const d = document.createElement("button");
       d.type = "button"; d.className = "del"; d.textContent = "✕"; d.setAttribute("aria-label", "Remove " + j.name);
       d.onclick = () => { const l = store.get("saved", []); l.splice(i, 1); store.set("saved", l); renderSaved(); };
@@ -396,6 +407,19 @@
         : "Version mismatch (page " + pageV + ", code " + CODE_VERSION + "). Close the app fully and reopen it.";
       el.classList.toggle("warn", pageV !== CODE_VERSION);
     }
+  }
+
+  // Back-swipe guard: the first back gesture is caught and warned about; a second one within 3s leaves.
+  {
+    let armedAt = 0;
+    try { history.pushState({ guard: 1 }, ""); } catch (e) {}
+    window.addEventListener("popstate", () => {
+      if (Date.now() - armedAt < 3000) { history.back(); return; }
+      armedAt = Date.now();
+      try { history.pushState({ guard: 1 }, ""); } catch (e) {}
+      status("Swipe back again to close Proper Roads.");
+      setTimeout(() => { if ($("status").textContent.startsWith("Swipe back")) status(""); }, 3000);
+    });
   }
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
