@@ -10,19 +10,19 @@
   // priority: how much the router dislikes a road class (1 = no penalty).
   const TOLERANCE = [
     { name: "Relaxed", hint: "Lanes only when they save real time. Slows lanes to a realistic 30mph.",
-      laneKmh: 48, unclassified: 0.5, minorOther: 0.2, tertiary: 1, narrow: 0.3 },
+      laneKmh: 48, unclassified: 0.5, minorOther: 0.2, tertiary: 1, narrow: 0.3, resi: 0.4, townSide: 0.5 },
     { name: "Balanced", hint: "Avoids lanes unless the main-road route is much longer. Lanes treated as 25mph.",
-      laneKmh: 40, unclassified: 0.2, minorOther: 0.05, tertiary: 0.9, narrow: 0.1 },
+      laneKmh: 40, unclassified: 0.2, minorOther: 0.05, tertiary: 0.9, narrow: 0.1, resi: 0.25, townSide: 0.35 },
     { name: "Strict", hint: "Stays on A and B roads wherever possible, and avoids narrow C roads too.",
-      laneKmh: 32, unclassified: 0.05, minorOther: 0.02, tertiary: 0.6, narrow: 0.02 }
+      laneKmh: 32, unclassified: 0.05, minorOther: 0.02, tertiary: 0.6, narrow: 0.02, resi: 0.15, townSide: 0.25 }
   ];
 
   // Route priority: how much each extra km costs (seconds per km).
   // Quickest leaves GraphHopper's default; higher values favour shorter routes.
   const PRIORITY = [
     { name: "Quickest", hint: "The fastest journey on proper roads.", distance: null },
-    { name: "Balanced", hint: "Cuts out long detours that only save a minute or two.", distance: 150 },
-    { name: "Shortest", hint: "The most direct route on proper roads, even if it's a bit slower.", distance: 400 }
+    { name: "Balanced", hint: "Cuts out long detours that only save a minute or two.", distance: 120 },
+    { name: "Shortest", hint: "The most direct route on proper roads, even if it's a bit slower. Still uses ring roads rather than town centres.", distance: 300 }
   ];
 
   // Small octagon (radius r metres) around a point, as GeoJSON coordinates.
@@ -38,13 +38,20 @@
     const m = {
       speed: [
         { if: "road_class == UNCLASSIFIED || road_class == TRACK || road_class == SERVICE", limit_to: t.laneKmh },
-        { if: "road_class == TERTIARY", limit_to: t.laneKmh + 24 }
+        { if: "road_class == TERTIARY", limit_to: t.laneKmh + 24 },
+        // Town streets: lights, crossings and traffic make them far slower than their limit.
+        { if: "road_class == RESIDENTIAL || road_class == LIVING_STREET", limit_to: 24 },
+        { if: "(road_class == TERTIARY || road_class == UNCLASSIFIED) && max_speed <= 50", limit_to: 28 }
       ],
       priority: [
         { if: "road_class == UNCLASSIFIED", multiply_by: t.unclassified },
         { if: "road_class == TRACK || road_class == SERVICE", multiply_by: t.minorOther },
         { if: "road_class == TERTIARY", multiply_by: t.tertiary },
-        { if: "max_width < 3.5", multiply_by: t.narrow }
+        { if: "max_width < 3.5", multiply_by: t.narrow },
+        // Prefer ring roads and bypasses to cutting through town centres.
+        { if: "road_class == RESIDENTIAL || road_class == LIVING_STREET", multiply_by: t.resi },
+        { if: "(road_class == TERTIARY || road_class == UNCLASSIFIED) && max_speed <= 50", multiply_by: t.townSide },
+        { if: "road_access == DESTINATION", multiply_by: 0.1 }
       ]
     };
     if (d != null) m.distance_influence = d;
