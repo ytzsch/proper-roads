@@ -35,7 +35,7 @@ Wants=network-online.target
 [Service]
 User=gh
 WorkingDirectory=/srv/gh
-ExecStart=/usr/bin/java -Xms1g -Xmx7g -jar /srv/gh/graphhopper-web.jar server /srv/gh/config.yml
+ExecStart=/usr/bin/java -Xms1g -Xmx6g -jar /srv/gh/graphhopper-web.jar server /srv/gh/config.yml
 Restart=on-failure
 RestartSec=30
 # The first start builds the routing graph, which can take 30-60 minutes.

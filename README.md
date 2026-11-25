@@ -36,7 +36,7 @@ In the Proxmox web UI, select the node, open **Shell** and paste:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ytzsch/proper-roads/main/server/install.sh)"
 ```
 
-This creates a Debian 12 container called `graphhopper` (4 cores, 9 GB RAM, 32 GB disk, starts on boot). Inside the container it installs Java 17, GraphHopper 10.2 and the Great Britain map. It also sets up a service and a monthly map refresh, then joins Tailscale with Tailscale Serve so the server gets a private HTTPS address.
+This creates a Debian 12 container called `graphhopper` (4 cores, 8 GB RAM, 32 GB disk, starts on boot). Inside the container it installs Java 17, GraphHopper 10.2 and the Great Britain map. It also sets up a service and a monthly map refresh, then joins Tailscale with Tailscale Serve so the server gets a private HTTPS address.
 
 - The first start builds the routing graph, which takes about 30 to 60 minutes. To watch it, run `pct enter <id>` and then `journalctl -u graphhopper -f`.
 - If Tailscale asks you to enable HTTPS certificates, follow its link.

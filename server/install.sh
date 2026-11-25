@@ -6,7 +6,7 @@ set -euo pipefail
 REPO_RAW="https://raw.githubusercontent.com/ytzsch/proper-roads/main/server"
 HOSTNAME_CT="graphhopper"
 CORES=4
-MEMORY=9216     # MB. Plenty for the build; HA keeps the rest.
+MEMORY=8192     # MB. Enough for the GB build; HA keeps the rest.
 SWAP=2048
 DISK=32         # GB
 
