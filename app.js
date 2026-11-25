@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "8", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "9", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -73,7 +73,7 @@
       const r = await fetch("https://nominatim.openstreetmap.org/search?" + new URLSearchParams({ q, format: "jsonv2", limit: "1", countrycodes: "gb" }));
       const hit = r.ok ? (await r.json())[0] : null;
       if (!hit) throw new Error("Couldn't find “" + q + "”. Try a postcode.");
-      return { lat: +hit.lat, lng: +hit.lon, label: hit.display_name.split(",").slice(0, 3).map(x => x.trim()).join(", ") };
+      return { lat: +hit.lat, lng: +hit.lon, label: String(hit.display_name || hit.name || q).split(",").slice(0, 3).map(x => x.trim()).join(", ") };
     }
     const r = await fetch(GH + "/geocode?" + new URLSearchParams({ q, locale: "en", limit: "1", key }));
     if (!r.ok) throw new Error(await ghError(r, "Couldn't look up “" + q + "”."));
@@ -145,7 +145,8 @@
     if (!current) return;
     current.sel = i;
     const pr = current.options[i];
-    const wps = PR.pickWaypoints(pr, current.std, +store.get("maxWp", 3));
+    const others = [current.std].concat(current.options.filter((_, j) => j !== i));
+    const wps = PR.pickWaypoints(pr, others, +store.get("maxWp", 3));
     show(current.std, pr, wps, current.from, current.to);
     draw(current.std, current.options, i, wps);
     renderOptions();
@@ -289,7 +290,7 @@
       const mine = ++seq;
       timer = setTimeout(async () => {
         const res = await suggestions(q);
-        if (mine !== seq) return; // a newer keystroke won
+        if (mine !== seq || document.activeElement !== input) return; // stale, or they've moved on
         items = res; active = -1; render();
       }, 350);
     });

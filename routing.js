@@ -120,17 +120,20 @@
   // Pick a few points on the proper route that stop Google cutting down lanes.
   // Look for stretches where the proper route leaves the usual one, and pin the
   // middle of each, preferring a spot on an A or B road.
-  function pickWaypoints(prPath, stdPath, max, opts) {
+  // `others` is the usual route plus the other options: anywhere the chosen route
+  // splits from any of them is a place Google could wander off, so pin it there.
+  function pickWaypoints(prPath, others, max, opts) {
     const o = Object.assign({ threshold: 250, step: 150 }, opts || {});
+    const list = (Array.isArray(others) ? others : [others]).filter(Boolean);
     const prS = resample(prPath.points.coordinates, classPerPoint(prPath), o.step);
-    const stdLine = resample(stdPath.points.coordinates, classPerPoint(stdPath), 50).map(s => s.p);
+    const lines = list.map(p => resample(p.points.coordinates, classPerPoint(p), 50).map(s => s.p));
     const total = prS[prS.length - 1].at;
-    prS.forEach(s => { s.d = distToLine(s.p, stdLine); });
+    prS.forEach(s => { s.d = lines.length ? Math.max(...lines.map(l => distToLine(s.p, l))) : 0; });
 
     const runs = [];
     let cur = null;
     prS.forEach((s, i) => {
-      const edge = s.at < 500 || total - s.at < 500; // never pin right by the ends
+      const edge = s.at < 300 || total - s.at < 300; // never pin right by the ends
       if (s.d > o.threshold && !edge) { (cur = cur || []).push(s); }
       else if (cur) { runs.push(cur); cur = null; }
       if (i === prS.length - 1 && cur) runs.push(cur);
