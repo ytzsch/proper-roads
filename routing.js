@@ -1,7 +1,9 @@
 // Routing logic for Proper Roads. No DOM here, so it can be tested in Node.
 (function (root) {
   const MINOR = new Set(["unclassified", "track", "service"]);
-  const MAJOR_RANK = { trunk: 3, primary: 3, secondary: 2, motorway: 1, tertiary: 1 };
+  // Where pins may go. Primary/secondary are usually single carriageway: ideal.
+  // Trunk roads are often dual carriageway (Google may snap to the other side), motorways never.
+  const MAJOR_RANK = { primary: 3, secondary: 3, trunk: 1.5, tertiary: 1 };
 
   // Lane tolerance: 0 relaxed, 1 balanced, 2 strict.
   // speed: realistic lane speeds instead of the 60mph national limit (km/h).
@@ -65,7 +67,7 @@
       points_encoded: false,
       instructions: false,
       locale: "en",
-      details: ["road_class"]
+      details: ["road_class", "road_class_link"]
     };
     if (level != null) { body["ch.disable"] = true; body.custom_model = customModel(level, priority, avoids); }
     return body;
@@ -100,6 +102,41 @@
     return out;
   }
 
+  // Whether each point is on a slip road / link road.
+  function linkPerPoint(path) {
+    const n = path.points.coordinates.length, out = new Array(n).fill(false);
+    for (const [a, b, v] of (path.details && path.details.road_class_link) || []) {
+      if (v) for (let i = a; i < b && i < n; i++) out[i] = true;
+    }
+    return out;
+  }
+
+  // Bearing in degrees from a to b.
+  function bearing(a, b) {
+    const k = Math.PI / 180, y = Math.sin((b[0] - a[0]) * k) * Math.cos(b[1] * k);
+    const x = Math.cos(a[1] * k) * Math.sin(b[1] * k) - Math.sin(a[1] * k) * Math.cos(b[1] * k) * Math.cos((b[0] - a[0]) * k);
+    return (Math.atan2(y, x) / k + 360) % 360;
+  }
+
+  // Flag resampled points that are bad places for a pin: slip roads, near a junction
+  // (road class changes), or near a bend/roundabout. Google tends to loop at those.
+  function markUnsafe(S, links, coordsLen, keep) {
+    const turn = new Array(S.length).fill(0);
+    for (let i = 1; i < S.length - 1; i++) {
+      let d = Math.abs(bearing(S[i - 1].p, S[i].p) - bearing(S[i].p, S[i + 1].p));
+      turn[i] = d > 180 ? 360 - d : d;
+    }
+    S.forEach((s, i) => {
+      let bad = !!(links && links[s.idx]);
+      for (let j = Math.max(0, i - keep); j <= Math.min(S.length - 1, i + keep) && !bad; j++) {
+        if (S[j].c !== s.c) bad = true;                 // junction with a different class of road nearby
+        if (turn[j] > 30) bad = true;                   // sharp bend or roundabout nearby
+        if (links && links[S[j].idx]) bad = true;       // slip road nearby
+      }
+      s.bad = bad;
+    });
+  }
+
   // Share of the route's distance spent on minor lanes.
   function laneStats(path) {
     const c = path.points.coordinates, cls = classPerPoint(path);
@@ -114,12 +151,12 @@
 
   // Resample a line so points are roughly `step` metres apart, keeping road class.
   function resample(coords, cls, step) {
-    const out = [{ p: coords[0], c: cls[0], at: 0 }];
+    const out = [{ p: coords[0], c: cls[0], at: 0, idx: 0 }];
     let run = 0, at = 0;
     for (let i = 1; i < coords.length; i++) {
       const d = dist(coords[i - 1], coords[i]);
       run += d; at += d;
-      if (run >= step || i === coords.length - 1) { out.push({ p: coords[i], c: cls[i - 1], at }); run = 0; }
+      if (run >= step || i === coords.length - 1) { out.push({ p: coords[i], c: cls[i - 1], at, idx: i - 1 }); run = 0; }
     }
     return out;
   }
@@ -143,6 +180,7 @@
     const nearAvoid = at => o.avoidAt.some(a => Math.abs(a - at) < 1500);
     const list = (Array.isArray(others) ? others : [others]).filter(Boolean);
     const prS = resample(prPath.points.coordinates, classPerPoint(prPath), o.step);
+    markUnsafe(prS, linkPerPoint(prPath), prPath.points.coordinates.length, 2); // ±300 m clear
     const lines = list.map(p => resample(p.points.coordinates, classPerPoint(p), 50).map(s => s.p));
     const total = prS[prS.length - 1].at;
     prS.forEach(s => { s.d = lines.length ? Math.max(...lines.map(l => distToLine(s.p, l))) : 0; });
@@ -169,11 +207,11 @@
       const mid = (run[0].at + run[run.length - 1].at) / 2;
       const centre = run.reduce((a, b) => (Math.abs(b.at - mid) < Math.abs(a.at - mid) ? b : a));
       // best-ranked major road near the middle of this stretch
+      // best-ranked, junction-free spot on a main road near the middle of this stretch
       let best = null, bestScore = -Infinity;
       for (const s of run) {
         const rank = MAJOR_RANK[s.c] || 0;
-        if (!rank) continue;
-        const score = rank * 1000 - Math.abs(s.at - mid) / 10;
+        const score = (s.bad ? -5000 : 0) + rank * 1000 - Math.abs(s.at - mid) / 10;
         if (score > bestScore) { bestScore = score; best = s; }
       }
       return { point: best || centre, score: peak.d * run.length };
@@ -192,7 +230,7 @@
         for (const s of prS) {
           if (s.at < 500 || total - s.at < 500 || nearAvoid(s.at)) continue;
           if (chosen.some(c => Math.abs(c.at - s.at) < Math.min(4000, total / (max * 2)))) continue;
-          const score = (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
+          const score = (s.bad ? -5000 : 0) + (MAJOR_RANK[s.c] || 0) * 1000 - Math.abs(s.at - target) / 5;
           if (score > bestScore) { bestScore = score; best = s; }
         }
         if (best) chosen.push(best);
@@ -258,6 +296,6 @@
   }
   const fmtMiles = metres => (metres / 1609.344).toFixed(1) + " miles";
 
-  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, alongRoute, nearRoute, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
+  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, markUnsafe, linkPerPoint, alongRoute, nearRoute, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
   if (typeof module !== "undefined") module.exports = api; else root.ProperRoads = api;
 })(this);
