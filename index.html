@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#00703c">
-<meta name="app-version" content="24">
+<meta name="app-version" content="25">
 <title>Proper Roads</title>
 <link rel="manifest" href="app.webmanifest">
 <link rel="icon" href="pr-icon.svg" type="image/svg+xml">
@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 </head>
 <body>
 <header class="sign">
@@ -114,6 +114,7 @@
       <p class="hint" id="chargerStatus"></p>
       <a class="primary go" id="gmaps" href="#" target="_blank" rel="noopener">Open in Google Maps</a>
       <div class="legs" id="legs" hidden></div>
+      <button type="button" class="ghost go" id="osmandBtn">Open in OsmAnd (follows the route exactly)</button>
       <p class="hint" id="wpHint"></p>
     </div>
 
@@ -167,7 +168,7 @@
 </dialog>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="routing.js?v=24"></script>
-<script src="app.js?v=24"></script>
+<script src="routing.js?v=25"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>

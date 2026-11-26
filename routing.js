@@ -272,6 +272,16 @@
     return paths.slice().sort((a, b) => score(a) - score(b));
   }
 
+  // GPX of a route (track + optional named stop), for apps like OsmAnd that can follow a track exactly.
+  function toGpx(path, name, stops) {
+    const esc = t => String(t).replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+    const pts = path.points.coordinates.map(([x, y]) => '<trkpt lat="' + y.toFixed(6) + '" lon="' + x.toFixed(6) + '"/>').join("\n");
+    const wpts = (stops || []).map(s => '<wpt lat="' + s.lat.toFixed(6) + '" lon="' + s.lng.toFixed(6) + '"><name>' + esc(s.name) + "</name></wpt>").join("\n");
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Proper Roads" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+      "<metadata><name>" + esc(name) + "</name></metadata>\n" + wpts + (wpts ? "\n" : "") +
+      "<trk><name>" + esc(name) + "</name><trkseg>\n" + pts + "\n</trkseg></trk>\n</gpx>\n";
+  }
+
   const ll = p => p.lat.toFixed(6) + "," + p.lng.toFixed(6);
 
   function googleMapsUrl(from, to, waypoints) {
@@ -287,6 +297,6 @@
   }
   const fmtMiles = metres => (metres / 1609.344).toFixed(1) + " miles";
 
-  const api = { TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, markUnsafe, linkPerPoint, alongRoute, nearRoute, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
+  const api = { toGpx, TOLERANCE, PRIORITY, ALTERNATIVES, rankOptions, markUnsafe, linkPerPoint, alongRoute, nearRoute, customModel, routeBody, dist, laneStats, classPerPoint, pickWaypoints, googleMapsUrl, fmtTime, fmtMiles };
   if (typeof module !== "undefined") module.exports = api; else root.ProperRoads = api;
 })(this);

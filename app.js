@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "24", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "25", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -400,6 +400,32 @@
     input.addEventListener("blur", () => setTimeout(close, 150));
   }
   setupSuggest("from"); setupSuggest("to");
+
+  // ---- Hand the exact route to OsmAnd (or any GPX app) ----
+  $("osmandBtn").addEventListener("click", async () => {
+    if (!current) return;
+    const pr = current.options[current.sel];
+    const name = (current.from.label || "Start").split(",")[0] + " to " + (current.to.label || "Finish").split(",")[0];
+    const stops = current.via ? [{ lat: current.via.lat, lng: current.via.lng, name: current.via.label || "Stop" }] : [];
+    const gpx = PR.toGpx(pr, name, stops);
+    const fname = "proper-roads-" + name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) + ".gpx";
+    // Prefer the share sheet (pick OsmAnd); fall back to a download you open from the notification.
+    for (const type of ["application/gpx+xml", "application/octet-stream"]) {
+      try {
+        const file = new File([gpx], fname, { type });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name });
+          status("Choose OsmAnd, then Follow track. See the tip below.");
+          return;
+        }
+      } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([gpx], { type: "application/gpx+xml" }));
+    a.download = fname; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    status("Route saved as " + fname + ". Open it from the download notification and choose OsmAnd.");
+  });
 
   // ---- Stop on the way ----
   function showStop(on) {
