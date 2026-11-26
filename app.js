@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "26", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "27", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -423,10 +423,13 @@
   $("osmandBtn").addEventListener("click", async () => {
     if (!current) return;
     const pr = current.options[current.sel];
-    const name = (current.from.label || "Start").split(",")[0] + " to " + (current.to.label || "Finish").split(",")[0];
+    const t = new Date(), hhmm = String(t.getHours()).padStart(2, "0") + String(t.getMinutes()).padStart(2, "0");
+    const letter = current.options.length > 1 ? " " + LETTERS[current.sel] : "";
+    // Unique, readable name: route letter and time, so the newest file is obvious in Downloads and OsmAnd.
+    const name = (current.from.label || "Start").split(",")[0] + " to " + (current.to.label || "Finish").split(",")[0] + letter + " " + hhmm;
     const stops = current.via ? [{ lat: current.via.lat, lng: current.via.lng, name: current.via.label || "Stop" }] : [];
     const gpx = PR.toGpx(pr, name, stops);
-    const fname = "proper-roads-" + name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) + ".gpx";
+    const fname = "pr-" + name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "").slice(0, 50) + "-" + String(t.getSeconds()).padStart(2, "0") + ".gpx";
     // Prefer the share sheet (pick OsmAnd); fall back to a download you open from the notification.
     for (const type of ["application/gpx+xml", "application/octet-stream"]) {
       try {
