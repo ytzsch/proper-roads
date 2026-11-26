@@ -122,3 +122,4 @@ button.small{min-height:36px;padding:4px 12px;font-size:14px}
 .legs .go small{font-weight:400;font-size:13px;opacity:.9}
 .pop-sep{border:0;border-top:1px solid #d6ddd8;margin:4px 0;width:100%}
 #osmandBtn{margin-top:8px;width:100%}
+.map-wrap.inline{height:55vh;min-height:300px;margin:4px -16px 12px;border-block:1px solid var(--line)}

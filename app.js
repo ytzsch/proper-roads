@@ -4,7 +4,7 @@
   // elements get a detached stand-in instead of crashing the app.
   const $ = id => document.getElementById(id) || document.createElement("div");
   const GH = "https://graphhopper.com/api/1";
-  const CODE_VERSION = "25", RELEASED = "25 Nov 2026";
+  const CODE_VERSION = "26", RELEASED = "25 Nov 2026";
   const store = {
     get(k, d) { try { const v = localStorage.getItem("pr-" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("pr-" + k, JSON.stringify(v)); } catch (e) {} }
@@ -54,6 +54,21 @@
     if (current.via) pin(current.via, "stop", "⚡", "Stop: " + current.via.label);
     map.fitBounds(bounds, { padding: [30, 30] });
   }
+
+  // On a phone, keep the map right under the route options (A/B/C) so you can see what you're choosing.
+  // Before any route is planned, it sits just under the form.
+  const mainEl = document.querySelector("main"), mapWrap = document.querySelector(".map-wrap");
+  function placeMap() {
+    const phone = window.innerWidth <= 760;
+    const results = $("results");
+    let target = null;
+    if (!phone) { if (mapWrap.parentElement !== mainEl) mainEl.append(mapWrap); }
+    else if (!results.hidden) { if (mapWrap.previousElementSibling !== $("options")) $("options").after(mapWrap); }
+    else if (mapWrap.previousElementSibling !== results) results.after(mapWrap);
+    mapWrap.classList.toggle("inline", phone);
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+  window.addEventListener("resize", () => { clearTimeout(placeMap.t); placeMap.t = setTimeout(placeMap, 150); });
 
   // ---- Places ----
   const POSTCODE = /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i;
@@ -161,6 +176,8 @@
       clearChargers();
       select(0);
       status("");
+      // On a phone, jump to the route options and map.
+      if (window.innerWidth <= 760) setTimeout(() => $("journey").scrollIntoView({ behavior: "smooth", block: "start" }), 100);
       $("saveBtn").hidden = false;
       $("savePlaceBtn").hidden = store.get("places", []).some(p => p.name.toLowerCase() === toText.trim().toLowerCase());
     } catch (e) {
@@ -286,6 +303,7 @@
             " on main roads to hold it to this route. Tap through them as stops.";
         })();
     $("results").hidden = false;
+    placeMap();
   }
 
   $("planForm").addEventListener("submit", e => { e.preventDefault(); plan($("from").value, $("to").value); });
@@ -792,6 +810,8 @@
       setTimeout(() => { if ($("status").textContent.startsWith("Swipe back")) status(""); }, 3000);
     });
   }
+
+  placeMap();
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
